@@ -1,0 +1,524 @@
+/* ------------------------------------------------------------------
+   Colmez LP (Figma: SR007 / LP 9236:1110)
+   Design frame: 1496 wide. --u = 1 design px, fluid.
+   Scroll choreography lives in main.js and drives the custom props below.
+------------------------------------------------------------------ */
+
+@font-face {
+  font-family: "Overused Grotesk";
+  src: url("assets/fonts/OverusedGrotesk-VF.woff2") format("woff2"),
+       url("assets/fonts/OverusedGrotesk-VF.woff") format("woff");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --c-black: #121212;
+  --c-white: #ffffff;
+  --c-grey-200: #737373;
+  --c-grey-800: #313131;
+  --c-gold-500: #ae9a29;
+
+  --u: calc(100vw / 1496);
+  --gutter: calc(40 * var(--u));
+  --content-w: calc(1416 * var(--u));
+
+  --font: "Overused Grotesk", "Helvetica Neue", Arial, sans-serif;
+
+  /* scroll track length of the stage (100vh pinned + this much scrolling).
+     The original choreography keeps its 420vh feel (main.js maps Pw over
+     420vh of scroll); 330vh cuts the dead tail — the waste/pattern exit now
+     happens DURING the crisis ride-in, driven by its entry progress E. */
+  --stage-track: 330vh;
+
+  /* scroll room for the pinned crisis accordion (two hand-over phases) */
+  --crisis-track: 200vh;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { background: var(--c-black); -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--c-black);
+  color: var(--c-white);
+  font-family: var(--font);
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img { display: block; }
+p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+
+.lp {
+  width: 100%;
+  container-type: inline-size;
+}
+@supports (width: 1cqw) {
+  .lp { --u: calc(100cqw / 1496); }
+}
+
+/* ---------- STAGE ---------- */
+
+.stage {
+  position: relative;
+  height: calc(100vh + var(--stage-track));
+}
+
+.stage__pin {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--c-black);
+}
+
+/* full-viewport layers */
+.layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- HERO COPY (Figma: headline at 40/271, 529 wide) ---------- */
+
+.hero-copy {
+  position: absolute;
+  left: var(--gutter);
+  top: calc(271 * var(--u));
+  width: calc(529 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+  z-index: 1;
+}
+
+.hero-copy__headline {
+  font-size: calc(48 * var(--u));
+  line-height: 1;
+  letter-spacing: -0.02em;
+  --hbase: var(--c-white);
+}
+
+.hero-copy__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: calc(14 * var(--u));
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--c-grey-200);
+  white-space: nowrap;
+  --hbase: var(--c-grey-200);
+}
+
+/* preloader entry variant: same sweep, but it leaves the base colour behind
+   (words appear); main.js swaps back to the dissolve gradient at handoff */
+.hero-copy .hw.win {
+  background-image: linear-gradient(90deg,
+    var(--hbase) 0%,
+    var(--hbase) var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
+    var(--c-grey-800) 100%);
+}
+
+/* hero words dissolve left→right with the same gold shimmer as the list below,
+   but in reverse: the sweep leaves transparency behind instead of white */
+.hero-copy .hw {
+  display: inline-block;
+  padding: 0.14em 0 0.24em;
+  margin: -0.14em 0 -0.24em;
+  --fill: -40%;   /* fully left of the word incl. the tail, so no gold at rest */
+  --edge-w: 14%;
+  --tail-w: 34%;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--hbase) calc(var(--fill) + var(--tail-w)),
+    var(--hbase) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+}
+
+/* ---------- PATTERN (vector canvas under the photo, inside the same box) ---------- */
+
+.pattern-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--c-black);
+}
+
+/* ---------- PHOTO LAYER (Figma: 1496×820 at y=460, rises to y=0) ---------- */
+
+.layer--photo {
+  z-index: 3;
+  top: calc(460 * var(--u));
+  height: 100vh;
+  transform: translate3d(0, calc(var(--rise, 0) * -460 * var(--u)), 0);
+  will-change: transform;
+}
+.photo__canvas,
+.photo__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+.photo__img { object-fit: cover; }
+.layer--photo.has-gl .photo__img { display: none; }
+.layer--photo:not(.has-gl) .photo__canvas { display: none; }
+.layer--photo:not(.has-gl) .photo__img { opacity: calc(1 - var(--dissolve, 0)); }
+
+/* ---------- TEXT LAYER ---------- */
+
+.layer--text {
+  z-index: 4;
+  pointer-events: none;
+}
+
+.waste {
+  position: absolute;
+  left: calc(50% - 110 * var(--u));
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: calc(96 * var(--u));
+  font-size: calc(56 * var(--u));
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.waste__list {
+  width: calc(748 * var(--u));
+  --fill: -24%;
+  --edge-w: 14%;   /* relative to one word now, so wider */
+  --tail-w: 34%;
+}
+
+/* Each word carries its own copy of the sweep gradient. JS sets background-size
+   to the paragraph width and background-position to the word offset, so all
+   words share one continuous sweep. (Gradient on the parent + composited word
+   transforms mis-renders in Chromium, hence per-word backgrounds.) */
+.waste .w {
+  display: inline-block;
+  opacity: 0;
+  padding: 0.14em 0 0.24em;   /* room for ascenders/descenders inside the bg box */
+  margin: -0.14em 0 -0.24em;  /* …without changing layout */
+  will-change: transform, opacity;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg,
+    var(--c-white) 0%,
+    var(--c-white) var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
+    var(--c-grey-800) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+}
+
+/* superscripts: grey-800 like the text while sliding in; the sweep turns them
+   grey-200 (instead of white). Own gradient copy, aligned by JS like the words. */
+.waste__list sup {
+  display: inline-block;
+  font-size: 0.5em;
+  line-height: 0;
+  vertical-align: 0.55em;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg,
+    var(--c-grey-200) 0%,
+    var(--c-grey-200) var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
+    var(--c-grey-800) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+}
+
+/* lead: word-by-word, same mechanics as the list (via .waste .w) */
+.waste__lead {
+  width: calc(818 * var(--u));
+  --fill: -24%;
+  --edge-w: 14%;
+  --tail-w: 34%;
+}
+
+/* dissolve-out (stage exit): hero-style — the sweep leaves transparency
+   behind the gold edge instead of white. main.js swaps the class per word. */
+.waste .w.wout {
+  background-image: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-white) calc(var(--fill) + var(--tail-w)),
+    var(--c-white) 100%);
+}
+.waste__list sup.wout {
+  background-image: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-grey-200) calc(var(--fill) + var(--tail-w)),
+    var(--c-grey-200) 100%);
+}
+
+/* ---------- SCROLL HINT (Figma: 40×129 at right gutter, y=661) ---------- */
+
+.scroll-hint {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(64 * var(--u));
+  right: var(--gutter);
+  width: calc(40 * var(--u));
+  height: calc(129 * var(--u));
+  padding: 0 calc(12 * var(--u)) calc(8 * var(--u));
+  background: var(--c-grey-200);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: calc(16 * var(--u));
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: var(--hint, 1);
+}
+.scroll-hint__arrow {
+  display: inline-block;
+  transform: rotate(90deg);
+}
+
+/* ---------- NAV (logo + CTA) ----------
+   Rest state = Figma hero positions. main.js interpolates top/left/width/height
+   towards the compact nav state (logo 24px tall top-left, CTA top-right). */
+
+.nav {
+  position: fixed;
+  inset: 0;
+  z-index: 50; /* above every section — the compact nav rides the whole page */
+  pointer-events: none;
+}
+.nav > * { pointer-events: auto; }
+
+.nav__logo {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--gutter);
+  width: var(--content-w);
+  height: calc(191 * var(--u));
+  will-change: left, top, width, height;
+}
+.nav__logo img { width: 100%; height: 100%; }
+
+/* hover fx: pattern revealed through liquid holes; the glyph clipping happens
+   in the shader (logo.svg sampled as an alpha-mask texture — CSS mask-image on
+   a WebGL canvas is unreliable in Chromium) */
+.nav__logo-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cta {
+  position: absolute;
+  left: calc(1117 * var(--u));
+  top: calc(271 * var(--u));
+  width: calc(339 * var(--u));
+  height: calc(129 * var(--u));
+  padding: 0 calc(12 * var(--u)) calc(8 * var(--u));
+  overflow: hidden; /* preloader draws it as a 2px line growing upward */
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  background: var(--c-gold-500);
+  color: var(--c-white);
+  font-size: calc(16 * var(--u));
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  will-change: left, top, width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waste__list, .waste__lead { transition: none; }
+}
+
+/* ---------- CRISIS (Figma 9236:1630) ----------
+   Headline (698, 48px) + accordion, pinned while the active state hands over
+   001 -> 002 -> 003. main.js drives per-item --mh (media height, design px),
+   subhead fades and the word sweeps; scroll room comes from --crisis-track. */
+
+.crisis {
+  position: relative;
+  background: var(--c-black);
+}
+.crisis::after {          /* scroll room for the pinned phases */
+  content: "";
+  display: block;
+  height: var(--crisis-track);
+}
+
+.crisis__pin {
+  position: sticky;
+  /* accordion (y=309) parks 72u under the top edge (clear of the fixed nav);
+     on short viewports the min() parks it higher so the whole list (incl.
+     subhead 003) stays visible — 1035 = list top 309 + list height 702 +
+     24u breathing room. Mirror any change in crisisProgress() in main.js. */
+  top: min(calc(-237 * var(--u)), calc(100vh - 1035 * var(--u)));
+  padding: calc(100 * var(--u)) 0 calc(132 * var(--u));
+  background: var(--c-black);
+}
+
+.crisis__head {
+  margin: 0 0 0 calc(40 * var(--u));
+  width: calc(698 * var(--u));
+  font-size: calc(48 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--c-white);
+}
+
+/* crisis words: same sweep mechanics as .waste .w — per-word gradient,
+   --wbase is the colour the sweep leaves behind (white / gold for numbers) */
+.crisis .cw {
+  display: inline-block;
+  opacity: 0;
+  padding: 0.14em 0 0.24em;
+  margin: -0.14em 0 -0.24em;
+  will-change: transform, opacity;
+  --wbase: var(--c-white);
+  --fill: -24%;
+  --edge-w: 14%;
+  --tail-w: 34%;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg,
+    var(--wbase) 0%,
+    var(--wbase) var(--fill),
+    var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+    var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
+    var(--c-grey-800) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+}
+.crisis .cw--gold { --wbase: var(--c-gold-500); }
+
+.crisis__list {
+  width: calc(1416 * var(--u));
+  margin: calc(80 * var(--u)) 0 0 calc(40 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(20 * var(--u)); /* tightened from Figma's 32 so subhead 003 fits on screen */
+}
+
+.crisis__rule {
+  border: 0;
+  margin: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--c-grey-800);
+}
+
+.crisis-item {
+  display: flex;
+  align-items: stretch;              /* image height drives the row */
+  justify-content: space-between;
+  gap: calc(40 * var(--u));
+}
+
+.crisis-item__left {
+  display: flex;
+  align-items: stretch;
+  gap: calc(40 * var(--u));
+  flex: 0 0 auto;
+}
+
+.crisis-item__num {
+  flex: 0 0 auto;
+  padding-top: calc(8 * var(--u));
+  font-size: calc(12 * var(--u));
+  line-height: 1;
+  font-weight: 500;
+  color: var(--c-gold-500);
+}
+
+.crisis-item__text {
+  width: calc(520 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;    /* title top, body bottom */
+}
+
+.crisis-item__title {
+  margin: 0;
+  font-size: calc(40 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--c-white);
+  white-space: nowrap;
+}
+
+/* subhead: words hide themselves (.cw); the container opacity is used by
+   main.js to fade the OUTGOING subhead while the item collapses */
+.crisis-item__desc {
+  margin: 0;
+  padding-top: calc(20 * var(--u));
+  font-size: calc(20 * var(--u));
+  line-height: 1;
+  font-weight: 400;
+  color: var(--c-white);
+}
+
+/* media height in design px via --mh, driven by main.js (340 active / 140 idle) */
+.crisis-item { --mh: 140; }
+.crisis-item.is-open { --mh: 340; }
+.crisis-item__media {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(698 * var(--u));
+  height: calc(var(--mh) * var(--u));
+  overflow: hidden;
+  --ifill: -34%; /* photo shimmer sweep, driven by main.js; rest <= -(tail 26%)
+                    so no gold sliver shows on the covered photo's left edge */
+}
+.crisis-item__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+/* shimmer-in: same sweep grammar as the words — a gold edge wipes L→R,
+   revealing the photo from under page-black */
+.crisis-item__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--ifill),
+    var(--c-gold-500) calc(var(--ifill) + 8%),
+    var(--c-black) calc(var(--ifill) + 26%),
+    var(--c-black) 100%);
+}
