@@ -55,7 +55,7 @@
 
   // ---------- nav morph ----------
   const LOGO_REST = { x: 40, y: 40, w: 1416, h: 191 };
-  const CTA_REST = { x: 1117, y: 271, w: 339, h: 129, fs: 16, pb: 8 };
+  const CTA_REST = { x: 1117, y: 271, w: 339, h: 96, fs: 16, pb: 8 }; // h = heading height (2 x 48)
   const NAV = { top: 20, logoH: 24, ctaW: 172, ctaH: 32, ctaFs: 12, pad: 12 };
   let lastNavT = -1;
 
@@ -195,29 +195,101 @@
       sy += dx * w;
     }
     if (stirActive || mStr > 0.01) {
-      let px = 0, py = 0;
-      if (mStr > 0.01) {
-        const dx = x - fwX, dy = y - fwY;
-        const w = Math.exp(-(dx * dx + dy * dy) / STIR_R2) * mStr;
-        px += (-dy * 1.2 + mDirX * 40) * w;
-        py += (dx * 1.2 + mDirY * 40) * w;
-      }
-      for (let i = 0; i < NSTIR; i++) {
-        const b = stir[i];
-        const age = (now - b.t0) / 1000;
-        if (age > STIR_LIFE) continue;
-        const dx = x - b.x, dy = y - b.y;
-        const env = Math.min(1, age / STIR_ATTACK); // ease in — no snapping
-        const w = Math.exp(-(dx * dx + dy * dy) / STIR_R2) * Math.exp(-age * STIR_DECAY) * env * env * (3 - 2 * env);
-        px += (-dy * 1.2 + b.dx * 40) * w;
-        py += (dx * 1.2 + b.dy * 40) * w;
-      }
-      px *= STIR_K; py *= STIR_K;
-      const m = Math.hypot(px, py);
-      if (m > STIR_CAP) { px *= STIR_CAP / m; py *= STIR_CAP / m; }
-      sx += px; sy += py;
+      mouseAt(x, y, now);
+      sx += M[0]; sy += M[1];
     }
     S[0] = sx; S[1] = sy;
+  }
+
+  // mouse part of the swirl (primary follower swirl + trail wake) -> M.
+  // Shared by the live displacement (swirlAt) and the permanent bake below.
+  const M = new Float32Array(2);
+  function mouseAt(x, y, now) {
+    let px = 0, py = 0;
+    if (mStr > 0.01) {
+      const dx = x - fwX, dy = y - fwY;
+      const w = Math.exp(-(dx * dx + dy * dy) / STIR_R2) * mStr;
+      px += (-dy * 1.2 + mDirX * 40) * w;
+      py += (dx * 1.2 + mDirY * 40) * w;
+    }
+    for (let i = 0; i < NSTIR; i++) {
+      const b = stir[i];
+      const age = (now - b.t0) / 1000;
+      if (age > STIR_LIFE) continue;
+      const dx = x - b.x, dy = y - b.y;
+      const env = Math.min(1, age / STIR_ATTACK); // ease in — no snapping
+      const w = Math.exp(-(dx * dx + dy * dy) / STIR_R2) * Math.exp(-age * STIR_DECAY) * env * env * (3 - 2 * env);
+      px += (-dy * 1.2 + b.dx * 40) * w;
+      py += (dx * 1.2 + b.dy * 40) * w;
+    }
+    px *= STIR_K; py *= STIR_K;
+    const m = Math.hypot(px, py);
+    if (m > STIR_CAP) { px *= STIR_CAP / m; py *= STIR_CAP / m; }
+    M[0] = px; M[1] = py;
+  }
+
+  // Bake the mouse stir into the base geometry so the pattern KEEPS its mixed
+  // shape once the wake dies out (paint, not jelly). BAKE = STIR_DECAY makes
+  // the bake absorb exactly what the transient wake loses per second — their
+  // sum stays put, so nothing visibly springs back. Auto-swirls and the morph
+  // noise stay transient on top; the stir interaction itself is unchanged.
+  const BAKE = STIR_DECAY;
+  let bakeT = 0;
+
+  // apply a displacement field permanently to every base point; sample(x, y)
+  // must leave the (already scaled) displacement in M. STEP-lerp as deform().
+  function bakeField(sample) {
+    const push = (pts) => {
+      const n = pts.length;
+      sample(pts[0], pts[1]);
+      let px = M[0], py = M[1], i0 = 0;
+      pts[0] += px; pts[1] += py;
+      for (let i = 2; i < n; i += STEP * 2) {
+        const j = Math.min(i + STEP * 2 - 2, n - 2);
+        sample(pts[j], pts[j + 1]);
+        const ndx = M[0], ndy = M[1];
+        const span = (j - i0) / 2 || 1;
+        for (let q = i; q <= j; q += 2) {
+          const f = ((q - i0) / 2) / span;
+          pts[q] += px + (ndx - px) * f;
+          pts[q + 1] += py + (ndy - py) * f;
+        }
+        px = ndx; py = ndy; i0 = j;
+      }
+    };
+    for (const l of patLines) push(l.pts);
+    for (const f of patFills) { push(f.pts); sample(f.cx, f.cy); f.cx += M[0]; f.cy += M[1]; }
+    for (const d of patDots) { sample(d.x, d.y); d.x += M[0]; d.y += M[1]; }
+  }
+
+  function bakeStir(now) {
+    const dt = Math.min(0.05, (now - bakeT) / 1000);
+    bakeT = now;
+    if (!stirActive || dt <= 0) return;
+    const k = BAKE * dt;
+    bakeField((x, y) => { mouseAt(x, y, now); M[0] *= k; M[1] *= k; });
+  }
+
+  // Fold ONE slot's remaining hold into the base right before the slot is
+  // reused. Without this, the wake region that slot was holding loses its
+  // displacement in a single frame — the "distant pattern snaps back" jump.
+  // Folding the full residue equals the slot completing its natural decay
+  // (continuous bake would have absorbed exactly that), so nothing moves.
+  function bakeSlot(b, now) {
+    const age = (now - b.t0) / 1000;
+    if (age > STIR_LIFE) return;
+    const env = Math.min(1, age / STIR_ATTACK);
+    const g = Math.exp(-age * STIR_DECAY) * env * env * (3 - 2 * env) * STIR_K;
+    if (g < 1e-3) return;
+    const CUT = STIR_R2 * 9; // beyond ~3 sigma the hold is negligible
+    bakeField((x, y) => {
+      const dx = x - b.x, dy = y - b.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > CUT) { M[0] = 0; M[1] = 0; return; }
+      const w = Math.exp(-d2 / STIR_R2) * g;
+      M[0] = (-dy * 1.2 + b.dx * 40) * w;
+      M[1] = (dx * 1.2 + b.dy * 40) * w;
+    });
   }
 
   // combined displacement field (morph + swirls) -> F
@@ -272,11 +344,12 @@
     patOy = (h - DESIGN_H * patScale) / 2;
   }
 
-  let lastPatKey = '';
+  let lastPatKey = '', patLive = false;
   function renderPattern(pd, now, dim) {
     if (!patReady) return;
     const t = now / 1000;
     const live = !REDUCED && pd > 0;
+    patLive = live;
     const key = live ? '' : `${pd.toFixed(4)}|${dim.toFixed(3)}`;
     if (key && key === lastPatKey) return;
     lastPatKey = key;
@@ -295,6 +368,7 @@
     ctx.lineJoin = 'round';
 
     const amp = live ? 1 : 0;
+    if (live) bakeStir(now);
 
     // noise dots — tiny bubbles: slow pulse, rare pops, riding the stir field
     let di = 0;
@@ -394,6 +468,7 @@
       if (sdx * sdx + sdy * sdy > 784) {
         const m = Math.hypot(mvx, mvy) || 1;
         const b = stir[stirHead]; stirHead = (stirHead + 1) % NSTIR;
+        if (patLive) bakeSlot(b, now); // fold its remaining hold in first — no snap
         b.x = fwX; b.y = fwY;
         b.dx = (mvx / m) * Math.min(1, vel / 900);
         b.dy = (mvy / m) * Math.min(1, vel / 900);
@@ -1000,6 +1075,9 @@
     cItems[0].style.setProperty('--mh', lerp(340, 140, a).toFixed(1));
     cItems[1].style.setProperty('--mh', lerp(lerp(140, 340, a), 140, b).toFixed(1));
     cItems[2].style.setProperty('--mh', lerp(140, 340, b).toFixed(1));
+    cItems[0].style.setProperty('--chw', lerp(100, 26, a).toFixed(1));
+    cItems[1].style.setProperty('--chw', lerp(lerp(26, 100, a), 26, b).toFixed(1));
+    cItems[2].style.setProperty('--chw', lerp(26, 100, b).toFixed(1));
     cDescs[0].style.opacity = (1 - seg(C, 0.06, 0.22)).toFixed(3);
     cDescs[1].style.opacity = (1 - seg(C, 0.56, 0.72)).toFixed(3);
   }
@@ -1010,7 +1088,7 @@
     const top = crisis.getBoundingClientRect().top;
     // rect.top at pin engage — mirrors the sticky top min() in styles.css
     const k = u();
-    const Ts = Math.min(-237 * k, vh - 1035 * k);
+    const Ts = Math.min(-237 * k, vh - 992 * k);
     CR.E = clamp01((vh - top) / Math.max(1, vh - Ts));
     CR.C = clamp01((Ts - top) / Math.max(1, crisis.offsetHeight - crisisPin.offsetHeight));
   }
