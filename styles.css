@@ -392,11 +392,12 @@ a { color: inherit; text-decoration: none; }
 
 .crisis__pin {
   position: sticky;
-  /* accordion (y=309) parks 72u under the top edge (clear of the fixed nav);
-     on short viewports the min() parks it higher so the whole list (incl.
-     subhead 003) stays visible — 992 = list top 266 (2-line head) + list
-     height 702 + 24u breathing room. Mirror any change in crisisProgress(). */
-  top: min(calc(-237 * var(--u)), calc(100vh - 992 * var(--u)));
+  /* first accordion row (list top 266 in the pin) parks 66u under the top
+     edge — CLEAR of the fixed nav logo (bottom 44u; the old short-viewport
+     min() lifted boxes into it, client complaint). Constant top: on short
+     viewports subhead 003 may dip below the fold — nav clearance wins.
+     Mirror any change in crisisProgress(). */
+  top: calc(-200 * var(--u));
   padding: calc(100 * var(--u)) 0 calc(132 * var(--u));
   background: var(--c-black);
 }
@@ -455,13 +456,15 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-white);
 }
 
-/* full-bleed band; the map renders at full internal resolution and the
-   container crops it (brief: the framing question) */
+/* full-bleed band, 713u tall like the Figma frame box; the frame lines are
+   drawn ON the canvas (horizontals run the full page width, verticals sit at
+   the 40u content margins) so they can draw in with the scroll.
+   Viewport-capped so frame + map always fit on screen. */
 .map__stage {
   position: relative;
   margin-top: calc(76 * var(--u));
   width: 100%;
-  height: min(calc(910 * var(--u)), 88vh); /* room for the full flat map at content width; viewport-capped so it never crops */
+  height: min(calc(713 * var(--u)), 86vh);
   overflow: hidden;
 }
 .map__stage canvas {

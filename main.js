@@ -1380,9 +1380,9 @@
   function crisisProgress() {
     const vh = window.innerHeight;
     const top = crisis.getBoundingClientRect().top;
-    // rect.top at pin engage — mirrors the sticky top min() in styles.css
+    // rect.top at pin engage — mirrors the sticky top in styles.css
     const k = u();
-    const Ts = Math.min(-237 * k, vh - 992 * k);
+    const Ts = -200 * k;
     CR.E = clamp01((vh - top) / Math.max(1, vh - Ts));
     CR.C = clamp01((Ts - top) / Math.max(1, crisis.offsetHeight - crisisPin.offsetHeight));
   }

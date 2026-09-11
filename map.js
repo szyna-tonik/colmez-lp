@@ -1,7 +1,7 @@
-/* Colmez map — an imitation of the client's product map (Markets view) in the
-   brand palette: grey ground, gold-tinted generator speckle, count bubbles
-   (dark gold = weak capture, industrial gold = strong), capture-rate legend —
-   no product chrome (no labels, toggles, chat, sidebar).
+/* Colmez map — an imitation of the client's product map (Markets view):
+   brand-grey ground, gold-tinted generator speckle, count bubbles + legend in
+   the PRODUCT's own colours (red #c64237 = weak capture, gold #dfa32f =
+   strong) — no product chrome (no labels, toggles, chat, sidebar).
    Ground = Kuba's block-map contour treatment (colmez-block-map-v11_2.html).
 
    The whole ride is SCROLL-DRIVEN (reversible): rises into perspective, lifts
@@ -9,12 +9,15 @@
    map spans the page's content width (capped by viewport height — it never
    crops). Driven from main.js via window.colmezMap.set(p).
 
-   Interaction (final state only):
-   - hovering a state: the rest dims, bubbles collapse to bare numbers, the
-     state lights up through goo holes (the hero-photo dissolve, in 2D) and
-     holds until the pointer leaves;
-   - hovering a bubble: it grows slightly and its number re-ticks like the
-     counters in the waste list. */
+   Interaction (once the map is mostly resolved, p >= HOV_P):
+   - hovering a state: the rest dims, off-state bubbles shrink 20% and grey
+     out (they never vanish), and — exactly like the hero logo hover — ONE
+     melting blob follows the cursor inside the state, revealing the logo's
+     dense pattern, clipped by the state contour; the name rides the cursor
+     in a crisis-style chip; the state's own bubbles stay at full colour;
+   - hovering a bubble (also while a state is lit): it grows slightly.
+   Bubbles + legend keep the CLIENT'S product colours (red = weak capture,
+   gold = strong) — that part is their product, not our palette. */
 (() => {
   const cv = document.getElementById('mapCv');
   if (!cv) return;
@@ -29,18 +32,36 @@
     edge: '#737373', edgeFlat: '#5d5d5d',
     hover: '#454748',
     goldDarker: '#38360d', goldDark: '#605817', gold: '#ae9a29', goldLight: '#dfcf77',
+    // the client's product colours (bubbles + capture-rate legend)
+    red: '#c64237', prodGold: '#dfa32f',
     ink: '#ffffff', grey: '#9a9a9a', grey7: '#737373',
   };
   const SPECK = [
     ['#38360d', 0.9], ['#605817', 0.65], ['#ae9a29', 0.4],
   ];
 
-  const S = { simp: 100, edge: 1.6, tilt: 0.54, rot: 0, persp: 0.08, bow: 0.1 };
-  const CAM0 = { tilt: 0.25, rot: -25 };
+  const S = { simp: 100, edge: 1.6, tilt: 0.54, rot: 0, persp: 0.08, bow: 0.1, zoom: 1 };
+  const CAM0 = { tilt: 0.25, rot: -25, zoom: 0.72 };
   // scroll-progress windows (p = 0..1 from main.js)
   const T = {
     form: [0, 0.25], flat: [0.28, 0.60], speck: [0.45, 0.75],
-    bub: [0.58, 0.96], leg: [0.92, 1],
+    bub: [0.58, 0.96], leg: [0.92, 1], frame: [0.02, 0.34],
+  };
+  const HOV_P = 0.7; // hover arms once the map is flat and bubbles are resolving
+
+  const NAMES = {
+    '01': 'Alabama', '04': 'Arizona', '05': 'Arkansas', '06': 'California',
+    '08': 'Colorado', '09': 'Connecticut', '10': 'Delaware', '11': 'District of Columbia',
+    '12': 'Florida', '13': 'Georgia', '16': 'Idaho', '17': 'Illinois', '18': 'Indiana',
+    '19': 'Iowa', '20': 'Kansas', '21': 'Kentucky', '22': 'Louisiana', '23': 'Maine',
+    '24': 'Maryland', '25': 'Massachusetts', '26': 'Michigan', '27': 'Minnesota',
+    '28': 'Mississippi', '29': 'Missouri', '30': 'Montana', '31': 'Nebraska',
+    '32': 'Nevada', '33': 'New Hampshire', '34': 'New Jersey', '35': 'New Mexico',
+    '36': 'New York', '37': 'North Carolina', '38': 'North Dakota', '39': 'Ohio',
+    '40': 'Oklahoma', '41': 'Oregon', '42': 'Pennsylvania', '44': 'Rhode Island',
+    '45': 'South Carolina', '46': 'South Dakota', '47': 'Tennessee', '48': 'Texas',
+    '49': 'Utah', '50': 'Vermont', '51': 'Virginia', '53': 'Washington',
+    '54': 'West Virginia', '55': 'Wisconsin', '56': 'Wyoming',
   };
 
   // clusters transcribed from the product screenshot: [lon, lat, label, weak?]
@@ -63,7 +84,7 @@
   ].map(([lon, lat, label, weak]) => ({
     ll: [lon, lat], label, weak: !!weak,
     v: parseFloat(label) * (label.endsWith('k') ? 1000 : 1),
-    hov: 0, tick0: -1e9,
+    hov: 0,
   }));
 
   const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -76,25 +97,23 @@
   function hx(h) { h = h.slice(1); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
   const pc = (v) => v.startsWith('rgb') ? v.match(/\d+/g).map(Number) : hx(v);
   function mixc(a, b, t) { const x = pc(a), y = pc(b); return 'rgb(' + Math.round(x[0] + (y[0] - x[0]) * t) + ',' + Math.round(x[1] + (y[1] - x[1]) * t) + ',' + Math.round(x[2] + (y[2] - x[2]) * t) + ')'; }
-  const fmt = (v, kStyle) => {
-    if (!kStyle) return String(Math.round(v));
-    const k = v / 1000;
-    return (k >= 10 ? Math.round(k) : Math.round(k * 10) / 10) + 'k';
-  };
 
   // ---------- geometry (Kuba's pipeline: warp -> geoTransform -> Path2D) ----------
   let RAW = null, PRE = null, WEIGHTS = null, TOPO = null, stateF = [], nation = null;
   let W = 0, H = 0, dpr = 1, MW = 0, MH = 0, OX = 0, OY = 0, projCache = null;
   let blocks = [], nationP = null, speckle = [];
-  let hitCv = null, hitCtx = null, HITKEYS = [];
+  // identity-transform context for exact point-in-polygon picking
+  const pickCtx = document.createElement('canvas').getContext('2d');
 
+  // screen = canvas centre + centred offsets scaled by tilt and zoom (the map
+  // grows to full content width as the ride flattens)
   function warp(x, y) {
     const cxm = MW / 2, cym = MH / 2;
     let dx = x - cxm, dy = y - cym;
     if (S.rot) { const a = S.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); const nx = dx * c - dy * s, ny = dx * s + dy * c; dx = nx; dy = ny; }
     if (S.bow) dy += S.bow * MH * (Math.pow(dx / cxm, 2) - 0.33);
     const u = dy / MH, k = 1 + S.persp * u;
-    return [OX + cxm + dx * k, OY + (cym + dy) * S.tilt];
+    return [W / 2 + dx * k * S.zoom, H / 2 + dy * S.tilt * S.zoom];
   }
 
   function resimplify() {
@@ -136,15 +155,16 @@
       W = nW; H = nH; dpr = nd;
       cv.width = W * dpr; cv.height = H * dpr;
       projCache = null;
-      hitCv = null;
     }
     if (!projCache) {
-      // final flat state: the page's content width, capped by the band height
-      // so the nation NEVER crops
+      // final flat state: big — as much of the frame's inner box (between the
+      // vertical lines at the 40u margins) as the band height allows, with a
+      // small inset so nothing crosses the lines
       const trial = d3.geoAlbers().fitWidth(1000, nation);
       const tb = d3.geoPath(trial).bounds(nation);
       const mhPerMw = (tb[1][1] - tb[0][1]) / 1000;
-      MW = Math.min(W * (1416 / 1496), (H * 0.96) / mhPerMw);
+      const innerW = W * (1416 / 1496);
+      MW = Math.min(innerW * 0.94, (H * 0.94) / mhPerMw);
       const mh = MW * mhPerMw;
       projCache = { MW, MH: mh, proj: d3.geoAlbers().fitExtent([[0, 0], [MW, mh]], nation) };
       const proj = projCache.proj;
@@ -169,18 +189,35 @@
     const nd2 = path(nation);
     nationP = nd2 ? new Path2D(nd2) : null;
 
-    // hover hit-test canvas (state under the pointer), CSS-pixel resolution
-    hitCv = document.createElement('canvas');
-    hitCv.width = W; hitCv.height = H;
-    hitCtx = hitCv.getContext('2d', { willReadFrequently: true });
-    hitCtx.fillStyle = '#000';
-    hitCtx.fillRect(0, 0, W, H);
-    HITKEYS = blocks.map((b) => b.fips);
-    blocks.forEach((b, i) => {
-      const v = i + 1;
-      hitCtx.fillStyle = 'rgb(' + (v & 255) + ',' + ((v >> 8) & 255) + ',0)';
-      hitCtx.fill(b.p);
-    });
+    // which state each bubble sits on (its bubbles stay lit on a state hover);
+    // coastal metros (SF, Seattle, New Orleans…) can land just outside the
+    // brutally simplified polygon — probe rings around the point, then fall
+    // back to the nearest centroid, so EVERY bubble gets a state
+    const inBlock = (x, y) => {
+      for (const bl of blocks) {
+        if (x < bl.bx[0][0] || x > bl.bx[1][0] || y < bl.bx[0][1] || y > bl.bx[1][1]) continue;
+        if (pickCtx.isPointInPath(bl.p, x, y)) return bl.fips;
+      }
+      return null;
+    };
+    for (const b of BUBBLES) {
+      const q = warp(b.px, b.py);
+      b.fips = inBlock(q[0], q[1]);
+      for (const rr of [6, 14, 26, 42]) {
+        if (b.fips) break;
+        for (let k = 0; k < 8 && !b.fips; k++) {
+          const a = (k / 8) * 6.2832;
+          b.fips = inBlock(q[0] + Math.cos(a) * rr, q[1] + Math.sin(a) * rr);
+        }
+      }
+      if (!b.fips) {
+        let bd = Infinity;
+        for (const bl of blocks) {
+          const dx = q[0] - bl.cx, dy = q[1] - bl.cy, d2 = dx * dx + dy * dy;
+          if (d2 < bd) { bd = d2; b.fips = bl.fips; }
+        }
+      }
+    }
     return true;
   }
 
@@ -190,58 +227,135 @@
   const anim = {};                  // fips -> goo progress 0..1
   let dim = 0;                      // rest-of-map dim, follows max(anim)
   let hoverRaf = 0;
+  let mx = -1, my = -1;             // pointer, CSS px (for the state-name label)
 
   // goo mask: blurred blobs thresholded by contrast — the 2D take on the
   // hero photo dissolve
   const gooA = document.createElement('canvas'), gooB = document.createElement('canvas');
 
-  function drawGoo(block, a) {
-    const bw = Math.ceil(block.bx[1][0] - block.bx[0][0]) + 80;
-    const bh = Math.ceil(block.bx[1][1] - block.bx[0][1]) + 80;
-    if (bw <= 0 || bh <= 0) return null;
-    if (gooA.width < bw || gooA.height < bh) { gooA.width = gooB.width = bw; gooA.height = gooB.height = bh; }
-    const ox = block.bx[0][0] - 40, oy = block.bx[0][1] - 40;
+  // the blob reveals the SAME pattern the hero logo hover shows: the logo
+  // shader covers its box with pattern.svg then zooms IN 2.6x, which lands at
+  // near-native pattern scale — dense, tight contours, brightened 1.35, no
+  // dimming. Rasterised into a mirror-tiled 2x2 canvas (seamless repeat) used
+  // as a translating CanvasPattern.
+  // the solid gold fill shapes are hidden — full-size they flood the blob
+  // with yellow; the logo look is the dense CONTOUR LINES + speckle only
+  const patImg = new Image();
+  patImg.onload = () => { patFill = null; if (lastP >= 0) { lastP = -1; set(curP); } };
+  fetch('assets/img/pattern.svg').then((r) => r.text()).then((txt) => {
+    const src = txt
+      .replace('<svg ', '<svg width="1496" height="820" ')
+      .replace('<g class="pattern__fills"', '<g style="display:none" class="pattern__fills"');
+    patImg.src = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+  }).catch(() => { patImg.src = 'assets/img/pattern.svg'; });
+  let patFill = null, patFillW = 0;
+  let patDX = 0, patDY = 0; // current drift, updated in paint()
+  function patternFill() {
+    if (!patImg.complete || !W) return null;
+    if (!patFill || patFillW !== W) {
+      const sc = (W / 1496) * 0.9; // near-native — the logo-hover density
+      const tw = Math.max(1, Math.round(1496 * sc)), th = Math.max(1, Math.round(820 * sc));
+      const tile = document.createElement('canvas');
+      tile.width = tw * 2; tile.height = th * 2;
+      const g = tile.getContext('2d');
+      g.fillStyle = '#121212';
+      g.fillRect(0, 0, tw * 2, th * 2);
+      try {
+        g.filter = 'brightness(1.35)'; // the logo shader's col * 1.35
+        for (const [fx, fy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+          g.setTransform(fx, 0, 0, fy, fx === 1 ? 0 : tw * 2, fy === 1 ? 0 : th * 2);
+          g.drawImage(patImg, 0, 0, tw, th);
+        }
+        g.filter = 'none';
+      } catch (e) { return null; }
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      patFill = ctx.createPattern(tile, 'repeat');
+      patFillW = W;
+    }
+    return patFill;
+  }
+
+  // ONE melting blob follows the eased cursor inside the hovered state —
+  // the logo-hover interaction: hole grows with a, edge undulates in time,
+  // slight downward melt bias, clipped by the state contour (the map's
+  // "glyph mask"). Built with the blur+contrast metaball trick.
+  let bxE = 0, byE = 0; // eased blob centre (k = 0.10/frame, like the logo)
+
+  function drawBlob(block, a, now) {
+    const Rmax = H * 0.26;
+    const R = a * Rmax;
+    if (R < 1) return null;
+    const pad = Math.ceil(Rmax * 1.6 + 40);
+    const w = pad * 2, h2 = pad * 2;
+    if (gooA.width < w || gooA.height < h2) { gooA.width = gooB.width = w; gooA.height = gooB.height = h2; }
+    const ox = bxE - pad, oy = byE - pad;
     const ga = gooA.getContext('2d'), gb = gooB.getContext('2d');
     ga.setTransform(1, 0, 0, 1, 0, 0);
     ga.clearRect(0, 0, gooA.width, gooA.height);
-    // seeds inside the state, lumpy metaballs
-    const maxR = Math.hypot(bw, bh) * 0.5;
-    const seedN = 3;
     ga.fillStyle = '#fff';
-    const h = parseInt(block.fips, 10);
-    for (let i = 0; i < seedN; i++) {
-      const sx = (block.cx - ox) + (rnd1(h * 7 + i) - 0.5) * bw * 0.42;
-      const sy = (block.cy - oy) + (rnd1(h * 13 + i) - 0.5) * bh * 0.42;
-      const R = a * maxR * (0.75 + 0.35 * rnd1(h * 3 + i));
-      for (let j = 0; j < 3; j++) {
-        const jx = sx + (rnd1(h + i * 5 + j) - 0.5) * R * 0.5;
-        const jy = sy + (rnd1(h + i * 9 + j + 40) - 0.5) * R * 0.5;
-        ga.beginPath();
-        ga.arc(jx, jy, Math.max(0.01, R * (0.55 + 0.25 * rnd1(h + j))), 0, 6.2832);
-        ga.fill();
-      }
+    const hs = parseInt(block.fips, 10);
+    const t = now * 0.001;
+    for (let i = 0; i < 7; i++) {
+      const wob = 1 + 0.10 * Math.sin(t * (0.8 + 0.5 * rnd1(hs + i * 3)) + i * 2.1);
+      const ang = rnd1(hs * 5 + i) * 6.2832 + t * 0.12 * (i % 2 ? 1 : -1);
+      const off = i === 0 ? 0 : R * 0.48 * (0.35 + 0.65 * rnd1(hs + i * 7));
+      const cx2 = pad + Math.cos(ang) * off;
+      const cy2 = pad + Math.sin(ang) * off * 0.9 + (i % 3 === 2 ? R * 0.14 : 0); // melt bias down
+      const rr = R * (i === 0 ? 0.70 : 0.26 + 0.30 * rnd1(hs * 11 + i)) * wob;
+      ga.beginPath();
+      ga.arc(cx2, cy2, Math.max(0.01, rr), 0, 6.2832);
+      ga.fill();
     }
-    const gb2 = gb;
-    gb2.setTransform(1, 0, 0, 1, 0, 0);
-    gb2.clearRect(0, 0, gooB.width, gooB.height);
-    gb2.filter = 'blur(9px) contrast(24)';
-    gb2.drawImage(gooA, 0, 0);
-    gb2.filter = 'none';
-    gb2.globalCompositeOperation = 'source-in';
-    gb2.fillStyle = C.hover;
-    gb2.fillRect(0, 0, gooB.width, gooB.height);
-    gb2.globalCompositeOperation = 'source-over';
+    gb.setTransform(1, 0, 0, 1, 0, 0);
+    gb.clearRect(0, 0, gooB.width, gooB.height);
+    gb.filter = 'blur(9px) contrast(24)';
+    gb.drawImage(gooA, 0, 0);
+    gb.filter = 'none';
+    gb.globalCompositeOperation = 'source-in';
+    const pat = patternFill();
+    if (pat) {
+      // pattern coords stay global (drift − blob-canvas offset) so it floats
+      pat.setTransform(new DOMMatrix().translate(patDX - ox, patDY - oy));
+      gb.fillStyle = pat;
+      gb.fillRect(0, 0, gooB.width, gooB.height);
+    } else { gb.fillStyle = C.hover; gb.fillRect(0, 0, gooB.width, gooB.height); }
+    gb.globalCompositeOperation = 'source-over';
     return { ox, oy, w: gooB.width, h: gooB.height };
   }
 
   // ---------- painting ----------
-  let PH = { ground: 0, flat: 0, speck: 0, bub: 0, leg: 0 }; // cached phases
+  let PH = { ground: 0, flat: 0, speck: 0, bub: 0, leg: 0, frame: 0 }; // cached phases
 
   function paint(now) {
+    // the pattern floats slowly, like a dense substance
+    if (!REDUCED) {
+      const t = now * 0.001;
+      patDX = 14 * Math.sin(t * 0.21) + 7 * Math.sin(t * 0.083 + 2.1);
+      patDY = 12 * Math.cos(t * 0.17) + 6 * Math.sin(t * 0.101 + 1.3);
+    }
     const s = MW / 1200;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, W, H);
+
+    // Figma frame: two 1px horizontals across the FULL page width at the
+    // band's top/bottom edges, two verticals at the 40u content margins
+    // between them — horizontals draw L->R, verticals follow T->B
+    if (PH.frame > 0) {
+      const mg = W * (40 / 1496);
+      const hT = easeIO(seg(PH.frame, [0, 0.7]));
+      const vT = easeIO(seg(PH.frame, [0.25, 1]));
+      ctx.strokeStyle = '#313131';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0.5); ctx.lineTo(W * hT, 0.5);
+      ctx.moveTo(0, H - 0.5); ctx.lineTo(W * hT, H - 0.5);
+      if (vT > 0) {
+        ctx.moveTo(mg + 0.5, 0.5); ctx.lineTo(mg + 0.5, H * vT);
+        ctx.moveTo(W - mg - 0.5, 0.5); ctx.lineTo(W - mg - 0.5, H * vT);
+      }
+      ctx.stroke();
+    }
 
     const topC = mixc(C.top, C.topFlat, PH.flat);
     ctx.globalAlpha = PH.ground;
@@ -249,13 +363,10 @@
       const a = anim[b.fips] || 0;
       ctx.fillStyle = dim > 0 ? mixc(topC, C.bg, 0.45 * dim * (1 - a)) : topC;
       ctx.fill(b.p);
-      // hovered state lights up through goo holes and holds
+      // the melting pattern blob rides the cursor inside the hovered state
       if (a > 0.004) {
-        if (REDUCED || a > 0.996) { ctx.fillStyle = C.hover; ctx.fill(b.p); }
-        else {
-          const g = drawGoo(b, easeIO(a));
-          if (g) { ctx.save(); ctx.clip(b.p); ctx.drawImage(gooB, 0, 0, g.w, g.h, g.ox, g.oy, g.w, g.h); ctx.restore(); }
-        }
+        const g = drawBlob(b, easeIO(a), now);
+        if (g) { ctx.save(); ctx.clip(b.p); ctx.drawImage(gooB, 0, 0, g.w, g.h, g.ox, g.oy, g.w, g.h); ctx.restore(); }
       }
     }
     ctx.lineWidth = S.edge;
@@ -293,44 +404,70 @@
         const p = warp(b.px, b.py);
         const r0 = (6 + 7.6 * Math.log10(b.v)) * s;
         b.sx = p[0]; b.sy = p[1]; b.sr = r0;
-        // a state hover collapses the circles to bare numbers; a bubble hover grows its own
-        const r = r0 * a * (1 - dim) * (1 + 0.14 * b.hov);
+        // a state hover keeps its own bubbles at full colour; the rest shrink
+        // 20% and grey out (never vanish) so the focus lands on the lit state
+        const aSt = anim[b.fips] || 0;
+        const bd = dim * (1 - aSt);
+        const r = r0 * a * (1 - 0.2 * bd) * (1 + 0.14 * b.hov);
+        const base = b.weak ? C.red : C.prodGold;
         if (r > 0.3) {
-          ctx.globalAlpha = 0.85 * a;
-          ctx.fillStyle = b.weak ? C.goldDark : C.gold;
+          // bubbles on the hovered state go fully opaque
+          ctx.globalAlpha = (0.85 + 0.15 * aSt * dim) * a * (1 - 0.3 * bd);
+          ctx.fillStyle = bd > 0.01 ? mixc(base, '#4a4a4a', 0.7 * bd) : base;
           ctx.beginPath();
           ctx.arc(p[0], p[1], r, 0, 6.2832);
           ctx.fill();
         }
         const fs = Math.max(8, Math.min(14 * s, r0 * 0.62)) * (1 + 0.10 * b.hov);
-        ctx.globalAlpha = a;
-        ctx.fillStyle = C.ink;
+        ctx.globalAlpha = a * (1 - 0.25 * bd);
+        ctx.fillStyle = bd > 0.01 ? mixc(C.ink, '#8a8a8a', bd) : C.ink;
         ctx.font = '500 ' + fs + 'px "Overused Grotesk", system-ui, sans-serif';
-        // a bubble hover re-ticks the count, waste-list style
-        const tf = REDUCED ? 1 : easeOut(clamp01((now - b.tick0) / 800));
-        ctx.fillText(tf >= 1 ? b.label : fmt(b.v * tf, b.label.endsWith('k')), p[0], p[1] + fs * 0.06);
+        ctx.fillText(b.label, p[0], p[1] + fs * 0.06);
       });
       ctx.globalAlpha = 1;
     }
 
     if (PH.leg > 0) {
-      const x = Math.max(32, OX), y = H - 40, bw = 148, bh = 5;
+      // raised + 10% larger (user rev)
+      const x = Math.max(32, OX), y = H - 72, bw = 163, bh = 6;
       ctx.globalAlpha = PH.leg * (1 - 0.5 * dim);
-      ctx.font = '500 9px "Overused Grotesk", system-ui, sans-serif';
+      ctx.font = '500 10px "Overused Grotesk", system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = C.grey;
       ctx.fillText('CAPTURE RATE', x, y);
       const g = ctx.createLinearGradient(x, 0, x + bw, 0);
-      g.addColorStop(0, C.goldDark);
-      g.addColorStop(1, C.goldLight);
+      g.addColorStop(0, C.red);
+      g.addColorStop(1, C.prodGold);
       ctx.fillStyle = g;
-      ctx.fillRect(x, y + 8, bw, bh);
+      ctx.fillRect(x, y + 9, bw, bh);
       ctx.fillStyle = C.grey7;
-      ctx.fillText('0% · WEAK', x, y + 26);
+      ctx.fillText('0% · WEAK', x, y + 29);
       ctx.textAlign = 'right';
-      ctx.fillText('STRONG · 100%', x + bw, y + 26);
+      ctx.fillText('STRONG · 100%', x + bw, y + 29);
       ctx.globalAlpha = 1;
+    }
+
+    // hovered state's name rides the cursor — same style as the crisis
+    // number chips: a small grey-800 plate, label bottom-left
+    if (dim > 0.02 && mx >= 0) {
+      let best = null, ba = 0;
+      for (const b of blocks) { const a2 = anim[b.fips] || 0; if (a2 > ba) { ba = a2; best = b; } }
+      if (best && NAMES[best.fips]) {
+        ctx.font = '600 12px "Overused Grotesk", system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const label = NAMES[best.fips].toUpperCase();
+        const tw = ctx.measureText(label).width;
+        const ch = 28, cw = tw + 12;
+        const cx2 = Math.min(mx + 16, W - cw - 8), cy2 = Math.max(8, my - 16 - ch);
+        ctx.globalAlpha = ba;
+        ctx.fillStyle = '#313131';
+        ctx.fillRect(cx2, cy2, cw, ch);
+        ctx.fillStyle = C.ink;
+        ctx.fillText(label, cx2 + 5, cy2 + ch - 6);
+        ctx.globalAlpha = 1;
+      }
     }
   }
 
@@ -343,24 +480,39 @@
     if (REDUCED) p = p > 0.05 ? 1 : 0;
     if (p === lastP) return;
     lastP = p;
+    if (p < HOV_P && (hovState || hovBub)) { hovState = null; hovBub = null; wake(); }
     const formE = easeIO(seg(p, T.form));
     const flatE = easeIO(seg(p, T.flat));
     S.tilt = lerp(lerp(CAM0.tilt, 0.54, formE), 1, flatE);
     S.rot = lerp(CAM0.rot, 0, formE);
     S.persp = lerp(0.08, 0, flatE);
     S.bow = lerp(0.1, 0, flatE);
-    const ck = S.tilt.toFixed(4) + '|' + S.rot.toFixed(3) + '|' + stage.clientWidth + 'x' + stage.clientHeight;
+    S.zoom = lerp(CAM0.zoom, 1, flatE); // the map grows to fill the band as it levels
+    const ck = S.tilt.toFixed(4) + '|' + S.rot.toFixed(3) + '|' + S.zoom.toFixed(4) + '|' + stage.clientWidth + 'x' + stage.clientHeight;
     if (ck !== camKey) { camKey = ck; if (!build()) return; }
-    PH = { ground: seg(p, [0, 0.08]), flat: flatE, speck: seg(p, T.speck), bub: seg(p, T.bub), leg: seg(p, T.leg) };
+    PH = { ground: seg(p, [0, 0.08]), flat: flatE, speck: seg(p, T.speck), bub: seg(p, T.bub), leg: seg(p, T.leg), frame: seg(p, T.frame) };
     paint(performance.now());
   }
 
   // ---------- hover (final state only) ----------
+  // exact point-in-polygon pick — the old hit-canvas approach antialiased the
+  // shared borders, so a pointer on a state line blended into a random
+  // neighbour's index and the highlight jumped
   function pick(x, y) {
-    if (!hitCtx || x < 0 || y < 0 || x >= W || y >= H) return null;
-    const d = hitCtx.getImageData(x, y, 1, 1).data;
-    const v = d[0] + (d[1] << 8);
-    return v > 0 ? HITKEYS[v - 1] : null;
+    if (x < 0 || y < 0 || x >= W || y >= H) return null;
+    for (const b of blocks) {
+      if (x < b.bx[0][0] || x > b.bx[1][0] || y < b.bx[0][1] || y > b.bx[1][1]) continue;
+      if (pickCtx.isPointInPath(b.p, x, y)) return b.fips;
+    }
+    // exactly on a shared border the point can land in no polygon — stay on
+    // the current state instead of flickering off (it must still be adjacent)
+    if (hovState) {
+      const cur = blocks.find((b) => b.fips === hovState);
+      if (cur)
+        for (const o of [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [-2, -2]])
+          if (pickCtx.isPointInPath(cur.p, x + o[0], y + o[1])) return hovState;
+    }
+    return null;
   }
 
   function hoverTick(now) {
@@ -371,44 +523,55 @@
       const tg = f === hovState ? 1 : 0;
       let a = anim[f] || 0;
       if (a === 0 && tg === 0) continue;
-      a += (tg - a) * (tg === 1 ? 0.075 : 0.17); // goo grows in readably, lets go quick
+      a += (tg - a) * (tg === 1 ? 0.062 : 0.038); // the logo hover's own easing
+      if (REDUCED) a = tg;
       if (tg === 1 && a > 0.996) a = 1;
       if (tg === 0 && a < 0.004) a = 0;
       if (a !== tg) busy = true;
       if (a === 0) delete anim[f]; else anim[f] = a;
     }
-    dim = 0;
-    for (const f in anim) dim = Math.max(dim, anim[f]);
+    // the blob centre chases the cursor like the logo hover's hole
+    if (mx >= 0) {
+      bxE += (mx - bxE) * (REDUCED ? 1 : 0.10);
+      byE += (my - byE) * (REDUCED ? 1 : 0.10);
+    }
+    // the global dim eases on its own — tying it to max(anim) made the whole
+    // map (and every bubble) dip and pop when crossing between two states
+    const dt = hovState ? 1 : 0;
+    if (dim !== dt) {
+      dim += (dt - dim) * (dt === 1 ? 0.1 : 0.17);
+      if (Math.abs(dim - dt) < 0.004) dim = dt; else busy = true;
+    }
     for (const b of BUBBLES) {
       const tg = b === hovBub ? 1 : 0;
       if (b.hov !== tg) { b.hov += (tg - b.hov) * 0.2; if (Math.abs(b.hov - tg) < 0.01) b.hov = tg; busy = true; }
-      if (now - b.tick0 < 820) busy = true;
     }
+    if (!REDUCED && dim > 0.004) busy = true; // keep the pattern drifting while a state is lit
     paint(now);
     if (busy) hoverRaf = requestAnimationFrame(hoverTick);
   }
   const wake = () => { if (!hoverRaf) hoverRaf = requestAnimationFrame(hoverTick); };
 
   cv.addEventListener('pointermove', (e) => {
-    if (curP < 0.98 || !hitCtx) return;
+    if (curP < HOV_P || !blocks.length) return;
     const r = cv.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    // bubbles take precedence over the state underneath
+    mx = x; my = y;
+    // a bubble hover adds on top of the state hover (grow), it does not
+    // release the lit state underneath
     let hb = null;
     for (const b of BUBBLES) {
       if (b.sx === undefined || b.sx < -1e5) continue;
       const dx = x - b.sx, dy = y - b.sy;
       if (dx * dx + dy * dy <= b.sr * b.sr * 1.21) { hb = b; break; }
     }
-    if (hb !== hovBub) {
-      hovBub = hb;
-      if (hb && !REDUCED) hb.tick0 = performance.now(); // re-tick on enter
-    }
-    const st = hb ? null : pick(Math.round(x), Math.round(y));
+    if (hb !== hovBub) hovBub = hb;
+    const st = pick(Math.round(x), Math.round(y));
+    if (st && !hovState && dim < 0.01) { bxE = x; byE = y; } // fresh hover: blob starts at the cursor
     if (st !== hovState) hovState = st;
     wake();
   });
-  cv.addEventListener('pointerleave', () => { hovState = null; hovBub = null; wake(); });
+  cv.addEventListener('pointerleave', () => { hovState = null; hovBub = null; mx = -1; my = -1; wake(); });
 
   let rt = 0;
   window.addEventListener('resize', () => {

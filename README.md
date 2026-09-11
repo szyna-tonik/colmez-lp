@@ -41,4 +41,4 @@ Then open http://localhost:8000
 ## Status
 
 Work in progress. Open items: final copy for subhead 002, the $50B figure in 003,
-sections after Crisis, mobile layout, real "Book a meeting" target.
+sections after the Markets map, mobile layout, real "Book a meeting" target.
