@@ -62,6 +62,16 @@
     <a class="cta" id="navCta" href="#contact">
       <span>Book a meeting</span>
       <span class="cta__arrow" aria-hidden="true">→</span>
+      <canvas class="cta__fx" id="ctaFx" aria-hidden="true"></canvas>
+    </a>
+    <!-- compact pair: forms while the big pair is still dissolving -->
+    <a class="nav__logo nav__logo--mini" id="navLogoMini" href="#" aria-hidden="true" tabindex="-1">
+      <img src="assets/img/logo.svg" alt="" width="1416" height="191">
+      <canvas class="nav__logo-fx" id="logoMiniFx" aria-hidden="true"></canvas>
+    </a>
+    <a class="cta cta--mini" id="navCtaMini" href="#contact" aria-hidden="true" tabindex="-1">
+      <span>Book a meeting</span>
+      <span class="cta__arrow" aria-hidden="true">→</span>
     </a>
   </header>
 
@@ -121,8 +131,20 @@
     </div>
   </section>
 
+  <!-- MAP: lead + the locked block map (map.js; brief: colmez-hero-map-brief.md).
+       The load sequence fires once, when the section first enters the viewport. -->
+  <section class="map" id="map">
+    <p class="map__lead" id="mapLead"><span class="cw">Colmez</span> <span class="cw">is</span> <span class="cw">the</span> <span class="cw">revenue</span> <span class="cw">platform</span> <span class="cw">for</span><br><span class="cw">hazardous</span> <span class="cw">waste</span> <span class="cw">disposal</span> <span class="cw">companies.</span><br><span class="cw">It</span> <span class="cw">finds</span> <span class="cw">the</span> <span class="cw">opportunities,</span> <span class="cw">manages</span> <span class="cw">the</span><br><span class="cw">pipeline,</span> <span class="cw">and</span> <span class="cw">shortens</span> <span class="cw">every</span> <span class="cw">sales</span> <span class="cw">cycle.</span></p>
+    <div class="map__stage">
+      <canvas id="mapCv" aria-label="Map of permitted hazardous waste disposal capacity across the United States" role="img"></canvas>
+    </div>
+  </section>
+
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson@3/dist/topojson.min.js"></script>
 <script src="main.js"></script>
+<script src="map.js"></script>
 </body>
 </html>

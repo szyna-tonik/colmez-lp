@@ -56,8 +56,21 @@
   // ---------- nav morph ----------
   const LOGO_REST = { x: 40, y: 40, w: 1416, h: 191 };
   const CTA_REST = { x: 1117, y: 271, w: 339, h: 96, fs: 16, pb: 8 }; // h = heading height (2 x 48)
-  const NAV = { top: 20, logoH: 24, ctaW: 172, ctaH: 32, ctaFs: 12, pad: 12 };
+  const NAV = { top: 20, logoH: 24, ctaW: 172, ctaH: 48, ctaFs: 12, pad: 12, ctaPb: 8 }; // CTA flush top-right, text at the bottom edge like the big one
   let lastNavT = -1;
+
+  // Hero -> nav hand-over, scroll-driven and fully reversible:
+  //   t 0.00-0.42  big logo + big CTA dissolve in place into goo holes
+  //                (the preloader reveal run backwards; CTA text bows out fast)
+  //   t 0.17-0.75  compact pair enters ON ITS OWN ELEMENTS while the big pair
+  //                is still dissolving: mini logo re-forms top-left out of the
+  //                same goo, mini CTA enters top-right preloader-style (2px
+  //                line draws, block grows up), flush to both edges
+  const logoMini = $('navLogoMini');
+  const logoMiniImg = logoMini.querySelector('img');
+  const ctaMini = $('navCtaMini');
+  const ctaMiniSpans = [...ctaMini.querySelectorAll('span')];
+  let navGoo = false; // owns the big-logo canvas while the dissolve runs
 
   function layoutNav(t) {
     if (t === lastNavT) return;
@@ -65,22 +78,92 @@
     const k = u();
     const vw = pin.clientWidth;
     const gutter = 40 * k;
-    const e = easeInOut(t);
 
-    const lh1 = NAV.logoH, lw1 = lh1 * (LOGO_REST.w / LOGO_REST.h);
-    logo.style.left = lerp(LOGO_REST.x * k, gutter, e) + 'px';
-    logo.style.top = lerp(LOGO_REST.y * k, NAV.top, e) + 'px';
-    logo.style.width = lerp(LOGO_REST.w * k, lw1, e) + 'px';
-    logo.style.height = lerp(LOGO_REST.h * k, lh1, e) + 'px';
+    const OUT = seg(t, 0, 0.42);
+    const IN = seg(t, 0.17, 0.75);
 
-    const fs = lerp(CTA_REST.fs * k, NAV.ctaFs, e);
-    const pb = lerp(CTA_REST.pb * k, (NAV.ctaH - fs * 1.2) / 2, e);
-    cta.style.left = lerp(CTA_REST.x * k, vw - gutter - NAV.ctaW, e) + 'px';
-    cta.style.top = lerp(CTA_REST.y * k, NAV.top + (NAV.logoH - NAV.ctaH) / 2, e) + 'px';
-    cta.style.width = lerp(CTA_REST.w * k, NAV.ctaW, e) + 'px';
-    cta.style.height = lerp(CTA_REST.h * k, NAV.ctaH, e) + 'px';
-    cta.style.fontSize = fs + 'px';
-    cta.style.padding = `0 ${lerp(12 * k, NAV.pad, e)}px ${pb}px`;
+    // big logo: rest + dissolve, always at its rest geometry
+    logo.style.left = LOGO_REST.x * k + 'px';
+    logo.style.top = LOGO_REST.y * k + 'px';
+    logo.style.width = LOGO_REST.w * k + 'px';
+    logo.style.height = LOGO_REST.h * k + 'px';
+    if (t <= 0) {                    // rest: plain <img> + hover fx
+      logo.style.visibility = '';
+      logoImgEl.style.opacity = '';
+      if (navGoo) { clearLogoCanvas(); navGoo = false; }
+    } else if (OUT < 1) {            // dissolving
+      logo.style.visibility = '';
+      navGoo = true;
+      logoImgEl.style.opacity = '0';
+      renderLogoGoo(1 - OUT);
+    } else {                         // gone (visibility also kills the link)
+      logo.style.visibility = 'hidden';
+      logoImgEl.style.opacity = '0';
+      if (navGoo) { clearLogoCanvas(); navGoo = false; }
+    }
+
+    // big CTA: rest + dissolve only
+    cta.style.left = CTA_REST.x * k + 'px';
+    cta.style.top = CTA_REST.y * k + 'px';
+    cta.style.width = CTA_REST.w * k + 'px';
+    cta.style.height = CTA_REST.h * k + 'px';
+    cta.style.fontSize = CTA_REST.fs * k + 'px';
+    cta.style.padding = `0 ${12 * k}px ${CTA_REST.pb * k}px`;
+    if (t <= 0) {
+      cta.style.visibility = '';
+      cta.style.background = '';
+      cta.style.opacity = '';
+      for (const s of ctaSpans) s.style.opacity = '';
+      renderCtaGoo(-1);
+    } else if (OUT < 1) {
+      cta.style.visibility = '';
+      cta.style.background = 'transparent';
+      cta.style.opacity = '1';
+      const st = (1 - seg(t, 0, 0.10)).toFixed(3);
+      for (const s of ctaSpans) s.style.opacity = st;
+      renderCtaGoo(1 - OUT);
+    } else {
+      cta.style.visibility = 'hidden';
+      renderCtaGoo(-1);
+    }
+
+    // mini logo: re-forms top-left out of the goo
+    const lw1 = NAV.logoH * (LOGO_REST.w / LOGO_REST.h);
+    logoMini.style.left = gutter + 'px';
+    logoMini.style.top = NAV.top + 'px';
+    logoMini.style.width = lw1 + 'px';
+    logoMini.style.height = NAV.logoH + 'px';
+    if (IN <= 0) {
+      logoMini.style.visibility = 'hidden';
+      logoMiniImg.style.opacity = '0';
+      clearMiniCanvas();
+    } else if (IN < 1) {
+      logoMini.style.visibility = 'visible';
+      logoMiniImg.style.opacity = '0';
+      renderLogoMiniGoo(IN);
+    } else {
+      logoMini.style.visibility = 'visible';
+      logoMiniImg.style.opacity = '';
+      clearMiniCanvas();
+    }
+
+    // mini CTA: the 2px line draws, then the block grows up; flush top-right
+    if (IN <= 0) {
+      ctaMini.style.visibility = 'hidden';
+    } else {
+      const lw = easeOut(seg(IN, 0, 0.50));
+      const lh = easeOut(seg(IN, 0.45, 1));
+      const w = NAV.ctaW * lw, h = Math.max(2, NAV.ctaH * lh);
+      ctaMini.style.visibility = lw > 0 ? 'visible' : 'hidden';
+      ctaMini.style.left = (vw - w) + 'px';        // flush right
+      ctaMini.style.top = (NAV.ctaH - h) + 'px';   // grows up, ends flush top
+      ctaMini.style.width = w + 'px';
+      ctaMini.style.height = h + 'px';
+      ctaMini.style.fontSize = NAV.ctaFs + 'px';
+      ctaMini.style.padding = `0 ${NAV.pad * lh}px ${NAV.ctaPb * lh}px`;
+      const ct = seg(IN, 0.80, 1);
+      for (const s of ctaMiniSpans) s.style.opacity = IN >= 1 ? '' : ct.toFixed(3);
+    }
   }
 
   // ---------- pattern data (parsed once from pattern.svg) ----------
@@ -857,7 +940,7 @@
       gl_FragColor = vec4(col * vis, vis);
     }`;
 
-  let lgl = null, pLogo = null, pLogoIn = null, logoTexReady = false, logoTex = null, logoMaskTex = null, logoMaskInTex = null, logoMaskReady = false;
+  let lgl = null, pLogo = null, pLogoIn = null, logoTexReady = false, logoTex = null, logoMaskTex = null, logoMaskInTex = null, logoMaskReady = false, logoMaskCanvas = null;
 
   function initLogoGL() {
     lgl = logoFx.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
@@ -954,6 +1037,13 @@
       lgl.texImage2D(lgl.TEXTURE_2D, 0, lgl.RGBA, lgl.RGBA, lgl.UNSIGNED_BYTE, c2);
       lgl.activeTexture(lgl.TEXTURE0);
       logoMaskReady = true;
+      logoMaskCanvas = c2; // the mini context uploads the same undilated mask
+      if (mgl && miniMaskTex && !miniMaskReady) {
+        mgl.activeTexture(mgl.TEXTURE1);
+        mgl.bindTexture(mgl.TEXTURE_2D, miniMaskTex);
+        mgl.texImage2D(mgl.TEXTURE_2D, 0, mgl.RGBA, mgl.RGBA, mgl.UNSIGNED_BYTE, c2);
+        miniMaskReady = true;
+      }
     };
     img.src = 'assets/img/logo.svg';
   }
@@ -1009,6 +1099,210 @@
     lgl.clearColor(0, 0, 0, 0);
     lgl.clear(lgl.COLOR_BUFFER_BIT);
     lgl.drawArrays(lgl.TRIANGLES, 0, 6);
+  }
+
+  // ---------- nav hand-over goo (logo + CTA) ----------
+  // scroll-driven variant of the preloader logo reveal: no latch, no <img>
+  // management — layoutNav owns the swap and calls this only when t changes
+  function renderLogoGoo(p) {
+    p = clamp01(p);
+    if (REDUCED || !lgl || !pLogoIn || !logoMaskReady) { // fallback: plain fade
+      logoImgEl.style.opacity = easeInOut(p).toFixed(3);
+      return;
+    }
+    lgl.useProgram(pLogoIn.prog);
+    lgl.activeTexture(lgl.TEXTURE1);
+    lgl.bindTexture(lgl.TEXTURE_2D, logoMaskInTex);
+    lgl.uniform1f(pLogoIn.uni.uP, easeInOut(p));
+    lgl.clearColor(0, 0, 0, 0);
+    lgl.clear(lgl.COLOR_BUFFER_BIT);
+    lgl.drawArrays(lgl.TRIANGLES, 0, 6);
+    logoFxClear = false;
+  }
+
+  function clearLogoCanvas() {
+    if (!lgl) return;
+    lgl.clearColor(0, 0, 0, 0);
+    lgl.clear(lgl.COLOR_BUFFER_BIT);
+    logoFxClear = true;
+  }
+
+  // mini logo goo: own GL context on the compact logo's canvas — the same
+  // FRAG_LOGO_IN program and undilated mask, so the compact logo can form
+  // while the big one is still dissolving on its own canvas
+  const logoMiniFx = $('logoMiniFx');
+  let mgl = null, pMini = null, miniMaskTex = null, miniMaskReady = false, miniClear = true;
+
+  function initMiniLogoGL() {
+    if (!logoMiniFx) return false;
+    mgl = logoMiniFx.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+    if (!mgl) return false;
+    const sh = (type, src) => {
+      const x = mgl.createShader(type);
+      mgl.shaderSource(x, src); mgl.compileShader(x);
+      if (!mgl.getShaderParameter(x, mgl.COMPILE_STATUS)) { console.error(mgl.getShaderInfoLog(x)); return null; }
+      return x;
+    };
+    const vs = sh(mgl.VERTEX_SHADER, VERT), fs = sh(mgl.FRAGMENT_SHADER, FRAG_LOGO_IN);
+    if (!vs || !fs) return false;
+    const prog = mgl.createProgram();
+    mgl.attachShader(prog, vs); mgl.attachShader(prog, fs);
+    mgl.bindAttribLocation(prog, 0, 'aPos');
+    mgl.linkProgram(prog);
+    if (!mgl.getProgramParameter(prog, mgl.LINK_STATUS)) { console.error(mgl.getProgramInfoLog(prog)); return false; }
+    const uni = {};
+    const n = mgl.getProgramParameter(prog, mgl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = mgl.getActiveUniform(prog, i);
+      uni[info.name.replace('[0]', '')] = mgl.getUniformLocation(prog, info.name);
+    }
+    pMini = { prog, uni };
+    const buf = mgl.createBuffer();
+    mgl.bindBuffer(mgl.ARRAY_BUFFER, buf);
+    mgl.bufferData(mgl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), mgl.STATIC_DRAW);
+    mgl.enableVertexAttribArray(0);
+    mgl.vertexAttribPointer(0, 2, mgl.FLOAT, false, 0, 0);
+    mgl.useProgram(prog);
+    mgl.uniform1i(uni.uMask, 1);
+    mgl.uniform3fv(uni.uGold, GOLD);
+    miniMaskTex = mgl.createTexture();
+    mgl.activeTexture(mgl.TEXTURE1);
+    mgl.bindTexture(mgl.TEXTURE_2D, miniMaskTex);
+    mgl.texParameteri(mgl.TEXTURE_2D, mgl.TEXTURE_WRAP_S, mgl.CLAMP_TO_EDGE);
+    mgl.texParameteri(mgl.TEXTURE_2D, mgl.TEXTURE_WRAP_T, mgl.CLAMP_TO_EDGE);
+    mgl.texParameteri(mgl.TEXTURE_2D, mgl.TEXTURE_MIN_FILTER, mgl.LINEAR);
+    mgl.texParameteri(mgl.TEXTURE_2D, mgl.TEXTURE_MAG_FILTER, mgl.LINEAR);
+    if (logoMaskCanvas) { mgl.texImage2D(mgl.TEXTURE_2D, 0, mgl.RGBA, mgl.RGBA, mgl.UNSIGNED_BYTE, logoMaskCanvas); miniMaskReady = true; }
+    return true;
+  }
+
+  function resizeMiniFx() {
+    if (!mgl || !pMini) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const w = Math.round(NAV.logoH * (LOGO_REST.w / LOGO_REST.h) * dpr), h = Math.round(NAV.logoH * dpr);
+    if (logoMiniFx.width !== w || logoMiniFx.height !== h) { logoMiniFx.width = w; logoMiniFx.height = h; }
+    mgl.viewport(0, 0, w, h);
+    mgl.useProgram(pMini.prog);
+    mgl.uniform2f(pMini.uni.uRes, w, h);
+  }
+
+  function renderLogoMiniGoo(p) {
+    p = clamp01(p);
+    if (REDUCED || !mgl || !pMini || !miniMaskReady) { // fallback: plain fade
+      logoMiniImg.style.opacity = easeInOut(p).toFixed(3);
+      return;
+    }
+    mgl.useProgram(pMini.prog);
+    mgl.uniform1f(pMini.uni.uP, easeInOut(p));
+    mgl.clearColor(0, 0, 0, 0);
+    mgl.clear(mgl.COLOR_BUFFER_BIT);
+    mgl.drawArrays(mgl.TRIANGLES, 0, 6);
+    miniClear = false;
+  }
+
+  function clearMiniCanvas() {
+    if (!mgl || miniClear) return;
+    mgl.clearColor(0, 0, 0, 0);
+    mgl.clear(mgl.COLOR_BUFFER_BIT);
+    miniClear = true;
+  }
+
+  // the gold slab of the big CTA, dissolving into the same goo holes as the
+  // logo (own tiny GL context on a canvas inside the button; text is DOM and
+  // bows out separately)
+  const ctaFx = $('ctaFx');
+  const FRAG_CTA = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform vec2 uRes;
+    uniform float uP;
+    uniform float uCover;
+    uniform vec3 uGold;
+    ${GLSL_NOISE}
+    void main(){
+      float sa = uRes.x / uRes.y;
+      vec2 q = vec2(vUv.x * sa, vUv.y);
+      float n1 = fbm3(q * 2.2 + 5.7);
+      float n2 = snoise(q * 5.0 + vec2(2.3, 8.1)) * 0.5;
+      float field = 10.0;
+      for (int i = 0; i < 3; i++) {
+        vec2 s = vec2(sa * (0.18 + 0.32 * float(i)), 0.5);
+        float grow = 0.8 + 0.2 * fract(float(i) * 0.618);
+        float r = max(uP * uCover * grow, 1e-4);
+        field = min(field, distance(q, s) / r);
+      }
+      float e = field + n1 * 0.38 + n2 * 0.12;
+      float vis = 1.0 - smoothstep(0.86, 1.12, e);
+      if (vis <= 0.0) { gl_FragColor = vec4(0.0); return; }
+      float rim = smoothstep(0.74, 1.0, e) * (1.0 - smoothstep(1.0, 1.2, e));
+      vec3 col = mix(uGold, vec3(0.95), rim * 0.5);
+      gl_FragColor = vec4(col * vis, vis);
+    }`;
+
+  let cgl = null, pCta = null, ctaGooClear = true;
+
+  function initCtaGL() {
+    if (!ctaFx) return false;
+    cgl = ctaFx.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+    if (!cgl) return false;
+    const sh = (type, src) => {
+      const x = cgl.createShader(type);
+      cgl.shaderSource(x, src); cgl.compileShader(x);
+      if (!cgl.getShaderParameter(x, cgl.COMPILE_STATUS)) { console.error(cgl.getShaderInfoLog(x)); return null; }
+      return x;
+    };
+    const vs = sh(cgl.VERTEX_SHADER, VERT), fs = sh(cgl.FRAGMENT_SHADER, FRAG_CTA);
+    if (!vs || !fs) return false;
+    const prog = cgl.createProgram();
+    cgl.attachShader(prog, vs); cgl.attachShader(prog, fs);
+    cgl.bindAttribLocation(prog, 0, 'aPos');
+    cgl.linkProgram(prog);
+    if (!cgl.getProgramParameter(prog, cgl.LINK_STATUS)) { console.error(cgl.getProgramInfoLog(prog)); return false; }
+    const uni = {};
+    const n = cgl.getProgramParameter(prog, cgl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = cgl.getActiveUniform(prog, i);
+      uni[info.name.replace('[0]', '')] = cgl.getUniformLocation(prog, info.name);
+    }
+    pCta = { prog, uni };
+    const buf = cgl.createBuffer();
+    cgl.bindBuffer(cgl.ARRAY_BUFFER, buf);
+    cgl.bufferData(cgl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), cgl.STATIC_DRAW);
+    cgl.enableVertexAttribArray(0);
+    cgl.vertexAttribPointer(0, 2, cgl.FLOAT, false, 0, 0);
+    cgl.useProgram(prog);
+    cgl.uniform3fv(uni.uGold, GOLD);
+    return true;
+  }
+
+  function resizeCtaFx() {
+    if (!cgl || !pCta) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const w = Math.round(CTA_REST.w * u() * dpr), h = Math.round(CTA_REST.h * u() * dpr);
+    if (ctaFx.width !== w || ctaFx.height !== h) { ctaFx.width = w; ctaFx.height = h; }
+    cgl.viewport(0, 0, w, h);
+    cgl.useProgram(pCta.prog);
+    cgl.uniform2f(pCta.uni.uRes, w, h);
+    // r at uP=1 covers the farthest corner incl. the noise margin
+    const sa = w / h;
+    cgl.uniform1f(pCta.uni.uCover, Math.hypot(sa * 0.18, 0.5) / 0.24);
+  }
+
+  function renderCtaGoo(p) { // p < 0: clear once (canvas idle)
+    if (REDUCED || !cgl || !pCta) {
+      if (p >= 0) cta.style.opacity = Math.max(0.001, easeInOut(clamp01(p))).toFixed(3);
+      return;
+    }
+    if (p < 0) {
+      if (!ctaGooClear) { cgl.clearColor(0, 0, 0, 0); cgl.clear(cgl.COLOR_BUFFER_BIT); ctaGooClear = true; }
+      return;
+    }
+    cgl.useProgram(pCta.prog);
+    cgl.uniform1f(pCta.uni.uP, easeInOut(clamp01(p)));
+    cgl.clearColor(0, 0, 0, 0);
+    cgl.clear(cgl.COLOR_BUFFER_BIT);
+    cgl.drawArrays(cgl.TRIANGLES, 0, 6);
+    ctaGooClear = false;
   }
 
   // ---------- crisis section (pinned accordion) ----------
@@ -1091,6 +1385,38 @@
     const Ts = Math.min(-237 * k, vh - 992 * k);
     CR.E = clamp01((vh - top) / Math.max(1, vh - Ts));
     CR.C = clamp01((Ts - top) / Math.max(1, crisis.offsetHeight - crisisPin.offsetHeight));
+  }
+
+  // ---------- map section (lead sweep + one-shot map start) ----------
+  const mapSec = $('map');
+  const mapWords = mapSec
+    ? [...mapSec.querySelectorAll('.map__lead .cw')].map((el, i, a) =>
+        ({ el, rs: 0.30 + (i / a.length) * 0.12 + hash01(i + 600) * 0.012 }))
+    : [];
+  let lastMapE = -1;
+
+  function mapProgress() {
+    if (!mapSec) return 0;
+    const vh = window.innerHeight;
+    return clamp01((vh - mapSec.getBoundingClientRect().top) / (vh * 0.85));
+  }
+
+  const mapStage = mapSec ? mapSec.querySelector('.map__stage') : null;
+
+  function updateMap(E) {
+    if (!mapSec || E === lastMapE) return;
+    lastMapE = E;
+    const travel = 38 * u();
+    for (const m of mapWords) sweepWord(m, E, CE_RISE, CE_LAG, CE_FILL, travel);
+  }
+
+  // the map ride itself is scroll-driven (reversible), anchored to the band
+  function mapAnimProgress() {
+    if (!mapStage) return 0;
+    const vh = window.innerHeight;
+    const r = mapStage.getBoundingClientRect();
+    const endTop = Math.max(vh * 0.10, vh - r.height - 140 * u());
+    return clamp01((vh - r.top) / Math.max(1, vh - endTop));
   }
 
   // ---------- preloader ----------
@@ -1286,7 +1612,7 @@
 
     renderPattern(pd, now, dim);
     renderGoo(Math.max(seg(Pw, 0.12, 0.55), PRE.goo)); // preloader reveals the photo (goo run backwards)
-    if (!PRE.active) renderLogoFx(now);
+    if (!PRE.active && !navGoo) renderLogoFx(now);
   }
 
   // ---------- page-wide smooth scroll (wheel only; other inputs stay native) ----------
@@ -1319,7 +1645,7 @@
   }
 
   // ---------- loop with smoothed progress ----------
-  let Ps = null, Es = null, Cs = null, lastTs = 0;
+  let Ps = null, Es = null, Cs = null, Ms = null, As = null, lastTs = 0;
 
   function loop(ts) {
     const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0.016);
@@ -1328,19 +1654,27 @@
     const wheelDriving = smoothScroll(dt);
     const P = progress();
     crisisProgress();
-    if (Ps === null || REDUCED) { Ps = P; Es = CR.E; Cs = CR.C; }
-    else if (wheelDriving) { Ps = P; Es = CR.E; Cs = CR.C; } // scroll itself is smoothed — no double lag
+    const Em = mapProgress();
+    const Am = mapAnimProgress();
+    if (Ps === null || REDUCED) { Ps = P; Es = CR.E; Cs = CR.C; Ms = Em; As = Am; }
+    else if (wheelDriving) { Ps = P; Es = CR.E; Cs = CR.C; Ms = Em; As = Am; } // scroll itself is smoothed — no double lag
     else {
       const k = 1 - Math.exp(-dt * 6.5);
       Ps += (P - Ps) * k;
       Es += (CR.E - Es) * k;
       Cs += (CR.C - Cs) * k;
+      Ms += (Em - Ms) * k;
+      As += (Am - As) * k;
       if (Math.abs(P - Ps) < 0.0004) Ps = P;
       if (Math.abs(CR.E - Es) < 0.0004) Es = CR.E;
       if (Math.abs(CR.C - Cs) < 0.0004) Cs = CR.C;
+      if (Math.abs(Em - Ms) < 0.0004) Ms = Em;
+      if (Math.abs(Am - As) < 0.0004) As = Am;
     }
     update(Ps, ts, dt);
     updateCrisis(Es, Cs);
+    updateMap(Ms);
+    if (window.colmezMap) window.colmezMap.set(As);
     requestAnimationFrame(loop);
   }
 
@@ -1359,6 +1693,8 @@
       resizeGL();
       resizePattern();
       resizeLogoFx();
+      resizeCtaFx();
+      resizeMiniFx();
       layoutWords();
       lastTextP = -1; lastHeroP = -1; lastNavT = -1; lastPatKey = ''; lastCrisisKey = '';
       dirty = true;
@@ -1367,6 +1703,8 @@
 
   if (!initGL()) photoLayer.classList.remove('has-gl');
   initLogoGL();
+  initCtaGL();
+  initMiniLogoGL();
   initPreloader();
   loadPattern();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutWords(); dirty = true; });
