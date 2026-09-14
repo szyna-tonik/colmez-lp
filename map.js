@@ -44,10 +44,13 @@
   const CAM0 = { tilt: 0.25, rot: -25, zoom: 0.72 };
   // scroll-progress windows (p = 0..1 from main.js)
   const T = {
-    form: [0, 0.25], flat: [0.28, 0.60], speck: [0.45, 0.75],
-    bub: [0.58, 0.96], leg: [0.92, 1], frame: [0.02, 0.34],
+    // the flat window starts LATE (user rev 2): the map holds its perspective
+    // pose — speckle and bubbles already resolving on it — until it nearly
+    // fills the viewport, and only then lifts and levels
+    form: [0, 0.22], flat: [0.66, 0.90], speck: [0.5, 0.78],
+    bub: [0.56, 0.94], leg: [0.92, 1], frame: [0.02, 0.34],
   };
-  const HOV_P = 0.7; // hover arms once the map is flat and bubbles are resolving
+  const HOV_P = 0.8; // hover arms once the map is levelling out
 
   const NAMES = {
     '01': 'Alabama', '04': 'Arizona', '05': 'Arkansas', '06': 'California',
@@ -157,14 +160,15 @@
       projCache = null;
     }
     if (!projCache) {
-      // final flat state: big — as much of the frame's inner box (between the
-      // vertical lines at the 40u margins) as the band height allows, with a
-      // small inset so nothing crosses the lines
+      // final flat state: as big as the band allows — side edges pushed out
+      // to nearly touch the vertical frame lines (user rev)
       const trial = d3.geoAlbers().fitWidth(1000, nation);
       const tb = d3.geoPath(trial).bounds(nation);
       const mhPerMw = (tb[1][1] - tb[0][1]) / 1000;
       const innerW = W * (1416 / 1496);
-      MW = Math.min(innerW * 0.94, (H * 0.94) / mhPerMw);
+      // 24px breathing room above and below — the map must never touch the
+      // horizontal frame lines (client rev; OY centres it, so 24 each side)
+      MW = Math.min(innerW * 0.995, (H - 48) / mhPerMw);
       const mh = MW * mhPerMw;
       projCache = { MW, MH: mh, proj: d3.geoAlbers().fitExtent([[0, 0], [MW, mh]], nation) };
       const proj = projCache.proj;
@@ -233,28 +237,40 @@
   // hero photo dissolve
   const gooA = document.createElement('canvas'), gooB = document.createElement('canvas');
 
-  // the blob reveals the SAME pattern the hero logo hover shows: the logo
-  // shader covers its box with pattern.svg then zooms IN 2.6x, which lands at
-  // near-native pattern scale — dense, tight contours, brightened 1.35, no
-  // dimming. Rasterised into a mirror-tiled 2x2 canvas (seamless repeat) used
-  // as a translating CanvasPattern.
-  // the solid gold fill shapes are hidden — full-size they flood the blob
-  // with yellow; the logo look is the dense CONTOUR LINES + speckle only
+  // the blob reveals EXACTLY what the hero logo hover shows. The logo shader
+  // cover-fits pattern.svg to the BIG logo's box (1416x191, aspect ~7.4 vs
+  // the texture's 1.82) — the cover crop + the 2.6x zoom land on the central
+  // 575x78 sliver of the pattern, ENLARGED ~2.46x (1416/575): thick, tightly
+  // packed strokes, fills included, brightness 1.35. We rasterise that same
+  // sliver at that same scale into a mirror-tiled 2x2 canvas (seamless
+  // repeat) used as a translating CanvasPattern.
   const patImg = new Image();
   patImg.onload = () => { patFill = null; if (lastP >= 0) { lastP = -1; set(curP); } };
+  // lineImg = the same pattern with the big solid pattern__fills areas turned
+  // off — at map scale a fill landing on a state flooded it in flat gold
+  // (client: lines everywhere, never gold fields); the fine noise dust stays
+  const lineImg = new Image();
+  lineImg.onload = () => { if (lastP >= 0) { lastP = -1; set(curP); } };
   fetch('assets/img/pattern.svg').then((r) => r.text()).then((txt) => {
-    const src = txt
-      .replace('<svg ', '<svg width="1496" height="820" ')
-      .replace('<g class="pattern__fills"', '<g style="display:none" class="pattern__fills"');
+    const src = txt.replace('<svg ', '<svg width="1496" height="820" ');
     patImg.src = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
-  }).catch(() => { patImg.src = 'assets/img/pattern.svg'; });
+    const lsrc = src.replace('<g class="pattern__fills" fill="#ae9a29">',
+                             '<g class="pattern__fills" fill="none">')
+      // doubled stroke weight: sampled zoomed OUT (uZoom < 1) the hero
+      // strokes thin to hairlines — this keeps the logo hover's line weight
+      .replace(/stroke-width="1\.0"/g, 'stroke-width="2.0"')
+      .replace(/stroke-width="1\.5"/g, 'stroke-width="3.0"');
+    lineImg.src = URL.createObjectURL(new Blob([lsrc], { type: 'image/svg+xml' }));
+  }).catch(() => { patImg.src = 'assets/img/pattern.svg'; lineImg.src = 'assets/img/pattern.svg'; });
   let patFill = null, patFillW = 0;
   let patDX = 0, patDY = 0; // current drift, updated in paint()
   function patternFill() {
     if (!patImg.complete || !W) return null;
     if (!patFill || patFillW !== W) {
-      const sc = (W / 1496) * 0.9; // near-native — the logo-hover density
-      const tw = Math.max(1, Math.round(1496 * sc)), th = Math.max(1, Math.round(820 * sc));
+      const sc = (W / 1496) * 2.46;         // the logo hover's effective scale (1416 / 575)
+      const sw = 1496 / 2.6, sh = 820 * (1.82 / 7.41) / 2.6; // the 575x78 sliver the shader samples
+      const sx = (1496 - sw) / 2, sy = (820 - sh) / 2;
+      const tw = Math.max(1, Math.round(sw * sc)), th = Math.max(1, Math.round(sh * sc));
       const tile = document.createElement('canvas');
       tile.width = tw * 2; tile.height = th * 2;
       const g = tile.getContext('2d');
@@ -264,7 +280,7 @@
         g.filter = 'brightness(1.35)'; // the logo shader's col * 1.35
         for (const [fx, fy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
           g.setTransform(fx, 0, 0, fy, fx === 1 ? 0 : tw * 2, fy === 1 ? 0 : th * 2);
-          g.drawImage(patImg, 0, 0, tw, th);
+          g.drawImage(patImg, sx, sy, sw, sh, 0, 0, tw, th);
         }
         g.filter = 'none';
       } catch (e) { return null; }
@@ -276,10 +292,192 @@
   }
 
   // ONE melting blob follows the eased cursor inside the hovered state —
-  // the logo-hover interaction: hole grows with a, edge undulates in time,
-  // slight downward melt bias, clipped by the state contour (the map's
-  // "glyph mask"). Built with the blur+contrast metaball trick.
+  // the hero logo hover interaction, run through THE SAME SHADER (FRAG_LOGO
+  // with the glyph mask dropped — the state contour clips in 2D instead).
+  // The dense "marble" of the logo hover comes from the shader's melt-smear
+  // warping the texture UVs, which no 2D approximation reproduces — so the
+  // blob renders on its own small WebGL canvas and is composited in.
   let bxE = 0, byE = 0; // eased blob centre (k = 0.10/frame, like the logo)
+
+  const GLSL_NOISE = `
+    vec3 mod289(vec3 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+    vec2 mod289(vec2 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+    vec3 permute(vec3 x){ return mod289(((x*34.0)+1.0)*x); }
+    float snoise(vec2 v){
+      const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+      vec2 i = floor(v + dot(v, C.yy));
+      vec2 x0 = v - i + dot(i, C.xx);
+      vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+      vec4 x12 = x0.xyxy + C.xxzz; x12.xy -= i1;
+      i = mod289(i);
+      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+      vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+      m = m*m; m = m*m;
+      vec3 x = 2.0 * fract(p * C.www) - 1.0;
+      vec3 h = abs(x) - 0.5;
+      vec3 ox = floor(x + 0.5);
+      vec3 a0 = x - ox;
+      m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+      vec3 g; g.x = a0.x * x0.x + h.x * x0.y; g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+      return 130.0 * dot(m, g);
+    }
+    float fbm3(vec2 p){
+      float v = 0.5 * snoise(p);
+      v += 0.25 * snoise(p * 2.02 + vec2(1.7, 9.2));
+      v += 0.125 * snoise(p * 4.08 + vec2(8.3, 2.8));
+      return v;
+    }`;
+
+  // FRAG_LOGO from main.js, VERBATIM (only the glyph mask is dropped — the
+  // state contour clips in 2D instead). The whole MAP canvas plays the part
+  // of the logo box: cover-fit + the 2.6x zoom run over it, so one
+  // continuous logo-style pattern underlies the entire map and a hovered
+  // state simply reveals its piece of it.
+  const FRAG_BLOB = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uTex;
+    uniform vec2 uRes;
+    uniform float uTexAspect;
+    uniform float uP;
+    uniform float uTime;
+    uniform vec2 uSeed;
+    uniform float uRad;
+    uniform float uZoom;
+    ${GLSL_NOISE}
+    void main(){
+      float sa = uRes.x / uRes.y;
+      vec2 uv = vUv;
+      if (sa > uTexAspect) uv.y = (uv.y - 0.5) * (uTexAspect / sa) + 0.5;
+      else                 uv.x = (uv.x - 0.5) * (sa / uTexAspect) + 0.5;
+
+      vec2 q = vec2(vUv.x * sa, vUv.y);
+      float n1 = fbm3(q * 2.6 + 3.1);
+      float n2 = snoise(q * 5.5 + vec2(7.3, 1.9)) * 0.5;
+
+      float r = max(uP * uRad, 1e-4);
+      float e = distance(q, uSeed) / r + n1 * 0.32 + n2 * 0.10;
+      float vis = 1.0 - smoothstep(0.86, 1.10, e);
+      if (vis <= 0.0) { gl_FragColor = vec4(0.0); return; }
+      float melt = (1.0 - smoothstep(0.55, 1.45, e)) * smoothstep(0.0, 0.08, uP);
+
+      uv = 0.5 + (uv - 0.5) / uZoom;
+
+      vec2 w = uv + vec2(
+        snoise(q * 1.6 + vec2(uTime * 0.05, -uTime * 0.04)),
+        snoise(q * 1.6 + vec2(-uTime * 0.045, uTime * 0.05) + 4.7)
+      ) * 0.004;
+
+      float drip = melt * (0.12 + 0.30 * (0.5 + 0.5 * n2)) * (0.35 + 0.65 * uP);
+      w.y -= drip * (0.6 + 0.4 * snoise(q * 9.0) * 0.6) * 0.4;
+      w.x += melt * 0.05 * snoise(q * 6.0 + 11.0) * 0.6;
+      w = 1.0 - abs(fract(w * 0.5) * 2.0 - 1.0); // mirror-tile: uZoom < 1 samples past the texture edge
+      vec3 col = texture2D(uTex, w).rgb * 1.35;
+
+      col *= 1.0 - 0.35 * melt;
+
+      gl_FragColor = vec4(col * vis, vis);
+    }`;
+
+  let bglCv = null, bgl = null, bglU = null, bglTexReady = false, bglSide = 0;
+  function initBlobGL(side) {
+    if (bgl === false) return null;
+    if (!bglCv) {
+      bglCv = document.createElement('canvas');
+      bgl = bglCv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+      if (!bgl) { bgl = false; return null; }
+      const sh = (t, s) => { const x = bgl.createShader(t); bgl.shaderSource(x, s); bgl.compileShader(x); return x; };
+      const VERT = 'attribute vec2 aP; varying vec2 vUv; void main(){ vUv = vec2(aP.x*0.5+0.5, 0.5-aP.y*0.5); gl_Position = vec4(aP,0.,1.); }';
+      const prog = bgl.createProgram();
+      bgl.attachShader(prog, sh(bgl.VERTEX_SHADER, VERT));
+      bgl.attachShader(prog, sh(bgl.FRAGMENT_SHADER, FRAG_BLOB));
+      bgl.linkProgram(prog);
+      if (!bgl.getProgramParameter(prog, bgl.LINK_STATUS)) { bgl = false; return null; }
+      bgl.useProgram(prog);
+      const buf = bgl.createBuffer();
+      bgl.bindBuffer(bgl.ARRAY_BUFFER, buf);
+      bgl.bufferData(bgl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), bgl.STATIC_DRAW);
+      const loc = bgl.getAttribLocation(prog, 'aP');
+      bgl.enableVertexAttribArray(loc);
+      bgl.vertexAttribPointer(loc, 2, bgl.FLOAT, false, 0, 0);
+      bglU = {};
+      for (const n of ['uTex', 'uRes', 'uTexAspect', 'uP', 'uTime', 'uSeed', 'uRad', 'uZoom'])
+        bglU[n] = bgl.getUniformLocation(prog, n);
+      const tex = bgl.createTexture();
+      bgl.bindTexture(bgl.TEXTURE_2D, tex);
+      bgl.texParameteri(bgl.TEXTURE_2D, bgl.TEXTURE_WRAP_S, bgl.CLAMP_TO_EDGE);
+      bgl.texParameteri(bgl.TEXTURE_2D, bgl.TEXTURE_WRAP_T, bgl.CLAMP_TO_EDGE);
+      bgl.texParameteri(bgl.TEXTURE_2D, bgl.TEXTURE_MIN_FILTER, bgl.LINEAR);
+      bgl.texParameteri(bgl.TEXTURE_2D, bgl.TEXTURE_MAG_FILTER, bgl.LINEAR);
+      bgl.uniform1i(bglU.uTex, 0);
+    }
+    if (!bglTexReady) {
+      if (!lineImg.complete || !lineImg.naturalWidth) return null;
+      // the logo texture raster: pattern.svg at 2244x1230 (makeLogoTexture),
+      // lines-only variant
+      const tc = document.createElement('canvas');
+      tc.width = 2244; tc.height = 1230;
+      const g = tc.getContext('2d');
+      g.fillStyle = '#121212';
+      g.fillRect(0, 0, 2244, 1230);
+      try { g.drawImage(lineImg, 0, 0, 2244, 1230); } catch (e) { return null; }
+      bgl.texImage2D(bgl.TEXTURE_2D, 0, bgl.RGB, bgl.RGB, bgl.UNSIGNED_BYTE, tc);
+      bglTexReady = true;
+    }
+    if (bglSide !== side) {
+      const w = Math.max(1, Math.round(W)), h = Math.max(1, Math.round(H));
+      bglCv.width = w; bglCv.height = h;
+      bgl.viewport(0, 0, w, h);
+      bglSide = side;
+    }
+    return bgl;
+  }
+
+  // the whole map canvas rendered through the logo hover shader — one
+  // continuous pattern layer; the hole chases the eased cursor exactly like
+  // on the logo, but its radius is sized per state so a fully lit state is
+  // covered EDGE TO EDGE (a fixed 0.52 left the far side of big states black,
+  // so the highlight read as a blob instead of a filled state)
+  function drawBlobGL(block, a, now) {
+    const gl2 = initBlobGL(Math.round(W) * 65536 + Math.round(H));
+    if (!gl2) return null;
+    const sa = W / H;
+    gl2.uniform2f(bglU.uRes, W, H);
+    gl2.uniform1f(bglU.uTexAspect, 1496 / 820);
+    gl2.uniform1f(bglU.uP, a);
+    gl2.uniform1f(bglU.uTime, REDUCED ? 7.3 : now / 1000);
+    gl2.uniform2f(bglU.uSeed, (bxE / W) * sa, byE / H);
+    gl2.uniform1f(bglU.uRad, blobRadius(block, sa));
+    gl2.uniform1f(bglU.uZoom, PAT_ZOOM);
+    gl2.clearColor(0, 0, 0, 0);
+    gl2.clear(gl2.COLOR_BUFFER_BIT);
+    gl2.drawArrays(gl2.TRIANGLES, 0, 6);
+    return true;
+  }
+
+  // q-space radius that reaches every corner of the block's bbox from the
+  // eased cursor; COVER absorbs the noise (n1*0.32 + n2*0.10) that pushes the
+  // dissolve edge inwards, so the polygon fills right up to its border
+  const BLOB_COVER = 1.5;
+  // 2.6 (the logo's own zoom) was far too coarse spread over the whole map —
+  // a hovered state showed two or three giant contour rings; 1.0 shows the
+  // full pattern across the band, matching the logo hover's line density
+  // (client rev: as dense as the logo). Mirror-tiled in the shader, so 0.7
+  // packs ~1.4x the full pattern across the band; the doubled raster stroke
+  // width keeps the lines at logo weight at this scale.
+  let PAT_ZOOM = 0.7;
+  function blobRadius(block, sa) {
+    const qx = (x) => (x / W) * sa, qy = (y) => y / H;
+    const sx = qx(bxE), sy = qy(byE);
+    let m = 0;
+    for (const cx of [block.bx[0][0], block.bx[1][0]])
+      for (const cy of [block.bx[0][1], block.bx[1][1]]) {
+        const dx = qx(cx) - sx, dy = qy(cy) - sy;
+        const d = Math.hypot(dx, dy);
+        if (d > m) m = d;
+      }
+    return Math.max(m * BLOB_COVER, 0.08);
+  }
 
   function drawBlob(block, a, now) {
     const Rmax = H * 0.26;
@@ -363,10 +561,14 @@
       const a = anim[b.fips] || 0;
       ctx.fillStyle = dim > 0 ? mixc(topC, C.bg, 0.45 * dim * (1 - a)) : topC;
       ctx.fill(b.p);
-      // the melting pattern blob rides the cursor inside the hovered state
+      // the hovered state reveals its piece of the map-wide pattern layer
+      // (the eased anim[fips] IS the logo's exponential lhp — no extra easing)
       if (a > 0.004) {
-        const g = drawBlob(b, easeIO(a), now);
-        if (g) { ctx.save(); ctx.clip(b.p); ctx.drawImage(gooB, 0, 0, g.w, g.h, g.ox, g.oy, g.w, g.h); ctx.restore(); }
+        if (drawBlobGL(b, a, now)) { ctx.save(); ctx.clip(b.p); ctx.drawImage(bglCv, 0, 0, W, H); ctx.restore(); }
+        else {
+          const g2 = drawBlob(b, easeIO(a), now); // 2D fallback (no WebGL)
+          if (g2) { ctx.save(); ctx.clip(b.p); ctx.drawImage(gooB, 0, 0, g2.w, g2.h, g2.ox, g2.oy, g2.w, g2.h); ctx.restore(); }
+        }
       }
     }
     ctx.lineWidth = S.edge;
@@ -420,8 +622,13 @@
         }
         const fs = Math.max(8, Math.min(14 * s, r0 * 0.62)) * (1 + 0.10 * b.hov);
         ctx.globalAlpha = a * (1 - 0.25 * bd);
-        ctx.fillStyle = bd > 0.01 ? mixc(C.ink, '#8a8a8a', bd) : C.ink;
-        ctx.font = '500 ' + fs + 'px "Overused Grotesk", system-ui, sans-serif';
+        // white on the product gold is ~1.9:1 — unreadable once the hovered
+        // state's pattern runs underneath; gold discs take the page black,
+        // the red (weak) discs keep white. Dimmed discs go dark, so the ink
+        // flips light as they grey out.
+        const ink0 = b.weak ? C.ink : '#121212';
+        ctx.fillStyle = bd > 0.01 ? mixc(ink0, b.weak ? '#8a8a8a' : '#9a9a9a', bd) : ink0;
+        ctx.font = '600 ' + fs + 'px "Overused Grotesk", system-ui, sans-serif';
         ctx.fillText(b.label, p[0], p[1] + fs * 0.06);
       });
       ctx.globalAlpha = 1;
@@ -593,5 +800,5 @@
     const p = curP; lastP = -1; set(p); // apply whatever the scroll already wants
   }).catch(() => {});
 
-  window.colmezMap = { set };
+  window.colmezMap = { set, zoom: (z) => { PAT_ZOOM = z; } };
 })();

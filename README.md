@@ -36,9 +36,15 @@ Then open http://localhost:8000
 1. **Preloader** — logo forms centre-screen out of three goo holes, flies up, hero reveals.
 2. **Hero (sticky stage)** — scroll-driven: photo rise, nav morph, headline dissolve,
    goo dissolve, vector pattern draw-in with mouse stir, waste list with counters.
-3. **Crisis** — pinned three-step accordion with gold-edge photo shimmer.
+3. **Crisis** — pinned three-step accordion; photos form out of goo (preloader-reveal shader).
+4. **Markets map** — scroll-driven perspective ride into the product's block map
+   (d3 + topojson, `map.js`), state hover runs the logo's melt shader over the whole map.
+5. **Quote** — advisor pull quote with photo goo-reveal.
+6. **Screens** — white band, three product feature rows; the fixed nav logo rides
+   `mix-blend-mode: difference` so it inverts over the light section.
 
 ## Status
 
-Work in progress. Open items: final copy for subhead 002, the $50B figure in 003,
-sections after the Markets map, mobile layout, real "Book a meeting" target.
+Work in progress. Open items: final copy for crisis subhead 002, the $50B figure in 003,
+final product screenshots for the Screens rows (one placeholder shot ×3), section after
+Screens (black tail in Figma), mobile layout, real "Book a meeting" target.

@@ -337,8 +337,11 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* compact pair (separate elements so they can form while the big pair is
-   still dissolving); JS owns geometry + visibility */
+   still dissolving); JS owns geometry + visibility. The mini logo's layer
+   blends with difference: white glyphs go black over the white screens
+   section and stay (near-)white on the dark ones, switching with the scroll */
 .nav__logo--mini, .cta--mini { visibility: hidden; }
+.nav--blend { mix-blend-mode: difference; }
 
 /* CTA goo canvas: paints the gold slab while it dissolves into holes on
    scroll (the DOM background goes transparent for the duration) */
@@ -414,13 +417,15 @@ a { color: inherit; text-decoration: none; }
 
 /* crisis words: same sweep mechanics as .waste .w — per-word gradient,
    --wbase is the colour the sweep leaves behind (white / gold for numbers) */
-.crisis .cw, .map .cw {
+.crisis .cw, .map .cw, .quote .cw, .screens .cw {
   display: inline-block;
   opacity: 0;
   padding: 0.14em 0 0.24em;
   margin: -0.14em 0 -0.24em;
   will-change: transform, opacity;
   --wbase: var(--c-white);
+  --wtail: var(--c-grey-800); /* pre-sweep colour — pick per section so the
+                                 unswept word melts into that section's bg */
   --fill: -24%;
   --edge-w: 14%;
   --tail-w: 34%;
@@ -430,20 +435,25 @@ a { color: inherit; text-decoration: none; }
     var(--wbase) 0%,
     var(--wbase) var(--fill),
     var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
-    var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
-    var(--c-grey-800) 100%);
+    var(--wtail) calc(var(--fill) + var(--tail-w)),
+    var(--wtail) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   background-repeat: no-repeat;
 }
 .crisis .cw--gold { --wbase: var(--c-gold-500); }
+/* light section: black ink sweeps in, tail melts into the white bg */
+.screens .cw { --wbase: var(--c-black); --wtail: #fff; }
+.screen-item__chip .cw { --wbase: var(--c-white); --wtail: var(--c-gold-500); }
+/* fade-rise lines (subs, list rows, roles) — driven like the words, no fill */
+.quote .fr, .screens .fr { opacity: 0; will-change: transform, opacity; }
 
 /* ---------- MAP (Figma 9249:1707 + colmez-hero-map-brief.md) ---------- */
 
 .map {
   position: relative;
   background: var(--c-black);
-  padding: calc(100 * var(--u)) 0 calc(140 * var(--u));
+  padding: calc(50 * var(--u)) 0 calc(24 * var(--u));
 }
 
 .map__lead {
@@ -456,15 +466,20 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-white);
 }
 
-/* full-bleed band, 713u tall like the Figma frame box; the frame lines are
+/* full-bleed band, 759u tall like the Figma frame box (9249:1707 rev: the
+   framed field grew 713 -> 759 and the section paddings tightened); the
+   frame lines are
    drawn ON the canvas (horizontals run the full page width, verticals sit at
    the 40u content margins) so they can draw in with the scroll.
    Viewport-capped so frame + map always fit on screen. */
 .map__stage {
   position: relative;
-  margin-top: calc(76 * var(--u));
+  margin-top: calc(44 * var(--u));
   width: 100%;
-  height: min(calc(713 * var(--u)), 86vh);
+  /* the vh term: viewport minus 64px nav clearance above the top line and
+     the 24u page-end tail below the bottom line — at page end the band runs
+     from just under the nav to ~24px above the viewport bottom (client rev) */
+  height: min(calc(759 * var(--u)), calc(100vh - 88px));
   overflow: hidden;
 }
 .map__stage canvas {
@@ -573,8 +588,22 @@ a { color: inherit; text-decoration: none; }
   object-fit: cover;
   object-position: center;
 }
-/* shimmer-in: same sweep grammar as the words — a gold edge wipes L→R,
-   revealing the photo from under page-black */
+/* goo-reveal overlay (JS-appended canvas): the preloader-logo reveal erodes
+   a section-coloured cover off the image, gold rim on the melt edge */
+.ggoo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* while the goo drives, the CSS shimmer ::after (kept as no-WebGL fallback)
+   steps aside — doubled class beats the per-section ::after rules that come
+   later in the file */
+.ggoo-on.ggoo-on::after { content: none; }
+
+/* shimmer-in (no-WebGL fallback): same sweep grammar as the words — a gold
+   edge wipes L→R, revealing the photo from under page-black */
 .crisis-item__media::after {
   content: "";
   position: absolute;
@@ -586,4 +615,186 @@ a { color: inherit; text-decoration: none; }
     var(--c-gold-500) calc(var(--ifill) + 8%),
     var(--c-black) calc(var(--ifill) + 26%),
     var(--c-black) 100%);
+}
+
+/* ---------- QUOTE (Figma 9264:273) ---------- */
+.quote {
+  position: relative;
+  height: calc(500 * var(--u));
+  background: var(--c-grey-800);
+  overflow: hidden;
+}
+.quote__media {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(354 * var(--u));
+  height: 100%;
+  background: #454748;
+  overflow: hidden;
+  --ifill: -34%;
+}
+.quote__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+/* photo shimmer — crisis grammar, cover colour = the section's grey */
+.quote__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--ifill),
+    var(--c-gold-500) calc(var(--ifill) + 8%),
+    var(--c-grey-800) calc(var(--ifill) + 26%),
+    var(--c-grey-800) 100%);
+}
+.quote__body {
+  position: absolute;
+  left: calc(499 * var(--u));
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(857 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(40 * var(--u));
+}
+.quote__text {
+  margin: 0;
+  font-size: calc(48 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--c-white);
+}
+.quote__attr { display: flex; flex-direction: column; gap: calc(8 * var(--u)); }
+.quote__name {
+  margin: 0;
+  font-size: calc(20 * var(--u));
+  line-height: 1;
+  font-weight: 400;
+  color: var(--c-white);
+}
+.quote__roles { display: flex; flex-direction: column; gap: calc(4 * var(--u)); }
+.quote__role {
+  margin: 0;
+  font-size: calc(14 * var(--u));
+  line-height: 1;
+  color: #8e8e8e;
+}
+
+/* ---------- SCREENS (Figma 9279:16) ---------- */
+.screens {
+  position: relative;
+  background: #fff;
+  color: var(--c-black);
+  padding: calc(150 * var(--u)) 0 calc(451 * var(--u));
+}
+.screens__head {
+  margin: 0 0 calc(149 * var(--u)) calc(40 * var(--u));
+  width: calc(798 * var(--u));
+  font-size: calc(48 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--c-black);
+}
+.screens__list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(120 * var(--u));
+}
+.screens__sep { height: 1px; background: rgba(115, 115, 115, 0.2); }
+.screen-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(40 * var(--u));
+}
+/* left column stretches to the media height; title block and the signal
+   list pin to its top and bottom (Figma: justify-between) */
+.screen-item__left {
+  display: flex;
+  gap: calc(32 * var(--u));
+  width: calc(660 * var(--u));
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+.screen-item__num {
+  flex: 0 0 auto;
+  width: calc(100 * var(--u));
+  padding-top: calc(8 * var(--u));
+}
+.screen-item__chip {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: calc(26 * var(--u));
+  background: var(--c-gold-500);
+  padding: calc(4 * var(--u)) 0 calc(4 * var(--u)) calc(4 * var(--u));
+  font-size: calc(10 * var(--u));
+  line-height: 1;
+  font-weight: 600;
+  color: var(--c-white);
+}
+.screen-item__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.screen-item__top { display: flex; flex-direction: column; gap: calc(32 * var(--u)); }
+.screen-item__title {
+  margin: 0;
+  font-size: calc(40 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.screen-item__sub { margin: 0; font-size: calc(20 * var(--u)); line-height: 1; font-weight: 400; }
+.screen-item__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(24 * var(--u));
+  font-size: calc(20 * var(--u));
+  line-height: 1;
+}
+.screen-item__rows li + li {
+  border-top: 1px solid rgba(115, 115, 115, 0.2);
+  padding-top: calc(24 * var(--u));
+}
+.screen-item__media {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(696 * var(--u));
+  height: calc(441 * var(--u));
+  border: 1px solid var(--c-black);
+  overflow: hidden;
+  --ifill: -34%;
+}
+.screen-item__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+/* shimmer over WHITE — the light section's take on the crisis photo sweep */
+.screen-item__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    transparent var(--ifill),
+    var(--c-gold-500) calc(var(--ifill) + 8%),
+    #fff calc(var(--ifill) + 26%),
+    #fff 100%);
 }

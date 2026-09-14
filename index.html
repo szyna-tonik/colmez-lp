@@ -64,16 +64,21 @@
       <span class="cta__arrow" aria-hidden="true">→</span>
       <canvas class="cta__fx" id="ctaFx" aria-hidden="true"></canvas>
     </a>
-    <!-- compact pair: forms while the big pair is still dissolving -->
-    <a class="nav__logo nav__logo--mini" id="navLogoMini" href="#" aria-hidden="true" tabindex="-1">
-      <img src="assets/img/logo.svg" alt="" width="1416" height="191">
-      <canvas class="nav__logo-fx" id="logoMiniFx" aria-hidden="true"></canvas>
-    </a>
+    <!-- compact CTA: forms while the big pair is still dissolving -->
     <a class="cta cta--mini" id="navCtaMini" href="#contact" aria-hidden="true" tabindex="-1">
       <span>Book a meeting</span>
       <span class="cta__arrow" aria-hidden="true">→</span>
     </a>
   </header>
+  <!-- compact logo rides in its OWN fixed layer: mix-blend-mode: difference
+       must blend with the page, and .nav's stacking context would isolate it.
+       The white glyphs invert to black over the white screens section. -->
+  <div class="nav nav--blend">
+    <a class="nav__logo nav__logo--mini" id="navLogoMini" href="#" aria-hidden="true" tabindex="-1">
+      <img src="assets/img/logo.svg" alt="" width="1416" height="191">
+      <canvas class="nav__logo-fx" id="logoMiniFx" aria-hidden="true"></canvas>
+    </a>
+  </div>
 
   <!-- CRISIS: pinned accordion. Entry: words sweep in waste-style while the
        section rides up. Pinned: active state hands over 001 -> 002 -> 003
@@ -137,6 +142,88 @@
     <p class="map__lead" id="mapLead"><span class="cw">Colmez</span> <span class="cw">is</span> <span class="cw">the</span> <span class="cw">revenue</span> <span class="cw">platform</span> <span class="cw">for</span><br><span class="cw">hazardous</span> <span class="cw">waste</span> <span class="cw">disposal</span> <span class="cw">companies.</span><br><span class="cw">It</span> <span class="cw">finds</span> <span class="cw">the</span> <span class="cw">opportunities,</span> <span class="cw">manages</span> <span class="cw">the</span><br><span class="cw">pipeline,</span> <span class="cw">and</span> <span class="cw">shortens</span> <span class="cw">every</span> <span class="cw">sales</span> <span class="cw">cycle.</span></p>
     <div class="map__stage">
       <canvas id="mapCv" aria-label="Map of permitted hazardous waste disposal capacity across the United States" role="img"></canvas>
+    </div>
+  </section>
+
+  <!-- QUOTE (Figma 9264:273): grey-800 band, advisor photo left, pull quote right -->
+  <section class="quote" id="quote">
+    <div class="quote__media"><img src="assets/img/quote-jeff.png" alt="Jeff Feeler"></div>
+    <div class="quote__body">
+      <blockquote class="quote__text"><span class="cw">“The</span> <span class="cw">teams</span> <span class="cw">that</span> <span class="cw">win</span> <span class="cw">in</span> <span class="cw">this</span> <span class="cw">industry</span> <span class="cw">are</span> <span class="cw">the</span> <span class="cw">ones</span> <span class="cw">that</span> <span class="cw">turn</span> <span class="cw">information</span> <span class="cw">into</span> <span class="cw">action</span> <span class="cw">first.</span> <span class="cw">Colmez</span> <span class="cw">keeps</span> <span class="cw">every</span> <span class="cw">sales</span> <span class="cw">cycle</span> <span class="cw">moving</span> <span class="cw">and</span> <span class="cw">puts</span> <span class="cw">more</span> <span class="cw">revenue</span> <span class="cw">on</span> <span class="cw">the</span> <span class="cw">board.”</span></blockquote>
+      <div class="quote__attr">
+        <p class="quote__name"><span class="cw">Jeff</span> <span class="cw">Feeler</span></p>
+        <div class="quote__roles">
+          <p class="quote__role fr">Former chairman, President and CEO, US Ecology</p>
+          <p class="quote__role fr">Strategic Advisor</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREENS (Figma 9279:16): white band — headline + three product feature
+       rows (gold chip, title, sub, signal list, bordered product shot) -->
+  <section class="screens" id="screens">
+    <h2 class="screens__head"><span class="cw">Find</span> <span class="cw">the</span> <span class="cw">opportunity.</span><br><span class="cw">Take</span> <span class="cw">the</span> <span class="cw">account.</span><br><span class="cw">Keep</span> <span class="cw">the</span> <span class="cw">pipeline</span> <span class="cw">moving.</span></h2>
+    <div class="screens__list">
+
+      <div class="screen-item">
+        <div class="screen-item__left">
+          <span class="screen-item__num"><span class="screen-item__chip"><span class="cw">001</span></span></span>
+          <div class="screen-item__text">
+            <div class="screen-item__top">
+              <h3 class="screen-item__title"><span class="cw">Every</span> <span class="cw">generator</span> <span class="cw">in</span> <span class="cw">America.</span><br><span class="cw">Every</span> <span class="cw">buying</span> <span class="cw">signal.</span></h3>
+              <p class="screen-item__sub fr">Built from public data. EPA e-Manifest, TRI, permits.</p>
+            </div>
+            <ul class="screen-item__rows">
+              <li class="fr">A new facility, a new product line, a new waste stream</li>
+              <li class="fr">A new EHS director at the account</li>
+              <li class="fr">A shipment that stopped, an incident, a lapsed contract</li>
+            </ul>
+          </div>
+        </div>
+        <div class="screen-item__media"><img src="assets/img/screen-radar.png" alt="Colmez product screen"></div>
+      </div>
+
+      <div class="screens__sep" aria-hidden="true"></div>
+
+      <div class="screen-item">
+        <div class="screen-item__left">
+          <span class="screen-item__num"><span class="screen-item__chip"><span class="cw">002</span></span></span>
+          <div class="screen-item__text">
+            <div class="screen-item__top">
+              <h3 class="screen-item__title"><span class="cw">Know</span> <span class="cw">what</span> <span class="cw">your</span> <span class="cw">competitors</span> <span class="cw">are</span> <span class="cw">doing</span></h3>
+              <p class="screen-item__sub fr">Share of wallet by account, stream and region. See where theirs is slipping.</p>
+            </div>
+            <ul class="screen-item__rows">
+              <li class="fr">Who holds most of each account</li>
+              <li class="fr">Where your share is weakest</li>
+              <li class="fr">Rejections, lapses and openings</li>
+            </ul>
+          </div>
+        </div>
+        <div class="screen-item__media"><img src="assets/img/screen-radar.png" alt="Colmez product screen"></div>
+      </div>
+
+      <div class="screens__sep" aria-hidden="true"></div>
+
+      <div class="screen-item">
+        <div class="screen-item__left">
+          <span class="screen-item__num"><span class="screen-item__chip"><span class="cw">003</span></span></span>
+          <div class="screen-item__text">
+            <div class="screen-item__top">
+              <h3 class="screen-item__title"><span class="cw">Your</span> <span class="cw">pipeline</span> <span class="cw">manages</span> <span class="cw">itself.</span></h3>
+              <p class="screen-item__sub fr">Signals in, fields filled, outbound drafted. No one typing it up.</p>
+            </div>
+            <ul class="screen-item__rows">
+              <li class="fr">Signal-based stages</li>
+              <li class="fr">Risk detection when an account goes quiet</li>
+              <li class="fr">Auto-filled fields and enriched contacts</li>
+            </ul>
+          </div>
+        </div>
+        <div class="screen-item__media"><img src="assets/img/screen-radar.png" alt="Colmez product screen"></div>
+      </div>
+
     </div>
   </section>
 

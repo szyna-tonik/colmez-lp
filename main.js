@@ -1305,6 +1305,120 @@
     ctaGooClear = false;
   }
 
+  // ---------- image goo reveal (shared) ----------
+  // Client rev: the --ifill shimmer on section photos read as cheap. The
+  // crisis / quote / screens images now form out of goo blobs — the
+  // preloader logo reveal (FRAG_LOGO_IN's field, seeds, noise and rim)
+  // INVERTED into an eroding cover: section-coloured cover outside the
+  // blobs, gold rim on the melt edge, image showing through inside. ONE
+  // shared offscreen WebGL canvas renders every reveal (contexts are
+  // scarce); each media gets a lazy 2D overlay the frame is copied onto.
+  // No-WebGL fallback: the old --ifill shimmer CSS still stands.
+  const FRAG_IMG_IN = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform vec2 uRes;
+    uniform float uP;
+    uniform vec3 uGold;
+    uniform vec3 uCover;
+    ${GLSL_NOISE}
+    void main(){
+      float sa = uRes.x / uRes.y;
+      vec2 q = vec2(vUv.x * sa, vUv.y);
+      float n1 = fbm3(q * 2.2 + 5.7);
+      float n2 = snoise(q * 5.0 + vec2(2.3, 8.1)) * 0.5;
+      float field = 10.0;
+      for (int i = 0; i < 3; i++) {
+        vec2 s = vec2(sa * (0.18 + 0.32 * float(i)), 0.5);
+        float grow = 0.8 + 0.2 * fract(float(i) * 0.618);
+        float r = max(uP * 4.5 * grow, 1e-4);
+        field = min(field, distance(q, s) / r);
+      }
+      float e = field + n1 * 0.38 + n2 * 0.12;
+      float vis = 1.0 - smoothstep(0.86, 1.12, e);
+      float rim = smoothstep(0.74, 1.0, e) * (1.0 - smoothstep(1.0, 1.2, e));
+      float a = max(1.0 - vis, rim * 0.85);
+      if (a <= 0.002) { gl_FragColor = vec4(0.0); return; }
+      vec3 col = mix(uCover, uGold, clamp(rim * 0.9, 0.0, 1.0));
+      gl_FragColor = vec4(col * a, a);
+    }`;
+
+  let igl = null, pImg = null, igCv = null, igFail = false;
+  function initImgGoo() {
+    igCv = document.createElement('canvas');
+    igl = igCv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+    if (!igl) { igFail = true; return; }
+    const sh = (type, src) => {
+      const x = igl.createShader(type);
+      igl.shaderSource(x, src); igl.compileShader(x);
+      if (!igl.getShaderParameter(x, igl.COMPILE_STATUS)) { console.error(igl.getShaderInfoLog(x)); return null; }
+      return x;
+    };
+    const vs = sh(igl.VERTEX_SHADER, VERT), fs = sh(igl.FRAGMENT_SHADER, FRAG_IMG_IN);
+    if (!vs || !fs) { igFail = true; return; }
+    const prog = igl.createProgram();
+    igl.attachShader(prog, vs); igl.attachShader(prog, fs);
+    igl.bindAttribLocation(prog, 0, 'aPos');
+    igl.linkProgram(prog);
+    if (!igl.getProgramParameter(prog, igl.LINK_STATUS)) { igFail = true; return; }
+    const uni = {};
+    const n = igl.getProgramParameter(prog, igl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = igl.getActiveUniform(prog, i);
+      uni[info.name.replace('[0]', '')] = igl.getUniformLocation(prog, info.name);
+    }
+    pImg = { prog, uni };
+    const buf = igl.createBuffer();
+    igl.bindBuffer(igl.ARRAY_BUFFER, buf);
+    igl.bufferData(igl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), igl.STATIC_DRAW);
+    igl.enableVertexAttribArray(0);
+    igl.vertexAttribPointer(0, 2, igl.FLOAT, false, 0, 0);
+    igl.useProgram(prog);
+    igl.uniform3fv(uni.uGold, GOLD);
+  }
+
+  const igMedia = new Map(); // mediaEl -> { cv, g, p }
+  function imgGooSet(media, p, coverCss, coverVec) {
+    p = clamp01(p);
+    if (!igl && !igFail) initImgGoo();
+    if (igFail) { // no WebGL: the CSS shimmer takes over, driven as before
+      media.style.setProperty('--ifill', lerp(-34, 124, p).toFixed(1) + '%');
+      return;
+    }
+    let st = igMedia.get(media);
+    if (!st) {
+      const cv = document.createElement('canvas');
+      cv.className = 'ggoo';
+      cv.setAttribute('aria-hidden', 'true');
+      media.appendChild(cv);
+      media.classList.add('ggoo-on'); // kills the ::after shimmer
+      st = { cv, g: cv.getContext('2d'), p: -1 };
+      igMedia.set(media, st);
+    }
+    if (p === st.p) return;
+    st.p = p;
+    const w = media.clientWidth, h = media.clientHeight;
+    if (!w || !h) { st.p = -1; return; }
+    const rw = Math.min(720, Math.round(w)), rh = Math.max(2, Math.round(rw * h / w));
+    if (st.cv.width !== rw || st.cv.height !== rh) { st.cv.width = rw; st.cv.height = rh; }
+    if (p >= 1) { st.g.clearRect(0, 0, rw, rh); return; }
+    if (p <= 0) { st.g.fillStyle = coverCss; st.g.fillRect(0, 0, rw, rh); return; }
+    if (igCv.width !== rw || igCv.height !== rh) { igCv.width = rw; igCv.height = rh; }
+    igl.viewport(0, 0, rw, rh);
+    igl.useProgram(pImg.prog);
+    igl.uniform2f(pImg.uni.uRes, rw, rh);
+    igl.uniform1f(pImg.uni.uP, easeInOut(p));
+    igl.uniform3fv(pImg.uni.uCover, coverVec);
+    igl.clearColor(0, 0, 0, 0);
+    igl.clear(igl.COLOR_BUFFER_BIT);
+    igl.drawArrays(igl.TRIANGLES, 0, 6);
+    st.g.clearRect(0, 0, rw, rh);
+    st.g.drawImage(igCv, 0, 0);
+  }
+  const COVER_BLACK = { css: '#121212', vec: [0x12 / 255, 0x12 / 255, 0x12 / 255] };
+  const COVER_GREY = { css: '#313131', vec: [0x31 / 255, 0x31 / 255, 0x31 / 255] };
+  const COVER_WHITE = { css: '#ffffff', vec: [1, 1, 1] };
+
   // ---------- crisis section (pinned accordion) ----------
   // E: entry — section top rides viewport-bottom → pin engage; every word
   //    except subheads 002/003 sweeps in waste-style.
@@ -1323,7 +1437,9 @@
   // entry cascade (in E): the section headline first, around mid-viewport;
   // then each box in order — box heading (number + title), photo, subhead
   const BOX_S = [0.58, 0.68, 0.78];
-  const IM_W = BOX_S.map((s) => [s + 0.02, s + 0.22]); // photo shimmer windows (slow reveal)
+  // photo reveal windows — stretched (client: fast scroll made the goo pop;
+  // capped at E=1 so the last box still completes before the pin engages)
+  const IM_W = BOX_S.map((s) => [s + 0.02, Math.min(1, s + 0.34)]);
   const cEntry = [];
   const addWords = (els, start, spread, seed) => els.forEach((el, i) =>
     cEntry.push({ el, rs: start + (i / els.length) * spread + hash01(i + seed) * 0.012 }));
@@ -1357,12 +1473,9 @@
     for (const m of cAct1) sweepWord(m, C, CA_RISE, CA_LAG, CA_FILL, travel);
     for (const m of cAct2) sweepWord(m, C, CA_RISE, CA_LAG, CA_FILL, travel);
 
-    // photos shimmer in L→R (gold edge over page-black), like the words.
-    // Rest = -34% keeps every gradient stop <= 0, so no gold sliver leaks
-    // on the covered photo's left edge (tail is 26% wide).
+    // photos form out of goo (preloader-logo reveal, black cover)
     for (let i = 0; i < 3; i++)
-      cMedias[i].style.setProperty('--ifill',
-        lerp(-34, 124, seg(E, IM_W[i][0], IM_W[i][1])).toFixed(1) + '%');
+      imgGooSet(cMedias[i], seg(E, IM_W[i][0], IM_W[i][1]), COVER_BLACK.css, COVER_BLACK.vec);
 
     const a = easeInOut(seg(C, 0.06, 0.44)); // 001 → 002
     const b = easeInOut(seg(C, 0.56, 0.94)); // 002 → 003
@@ -1410,12 +1523,86 @@
     for (const m of mapWords) sweepWord(m, E, CE_RISE, CE_LAG, CE_FILL, travel);
   }
 
+  // ---------- quote + screens sections (entry choreography) ----------
+  // Same grammar as crisis/map: words sweep in, photos shimmer L→R, plain
+  // lines (roles, subs, list rows) fade-rise. Each element rides its own
+  // section-entry progress (viewport-bottom → 85% of a viewport).
+  const wordsIn = (root, sel, start, spread, seed) => [...root.querySelectorAll(sel)]
+    .map((el, i, a) => ({ el, rs: start + (i / Math.max(1, a.length)) * spread + hash01(i + seed) * 0.012 }));
+
+  const quoteSec = $('quote');
+  const quoteMedia = quoteSec ? quoteSec.querySelector('.quote__media') : null;
+  const qWords = quoteSec
+    ? [...wordsIn(quoteSec, '.quote__text .cw', 0.32, 0.14, 700),
+       ...wordsIn(quoteSec, '.quote__name .cw', 0.56, 0.03, 730)]
+    : [];
+  const qFr = quoteSec
+    ? [...quoteSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.60 + i * 0.04 }))
+    : [];
+
+  const screensSec = $('screens');
+  const sHeadWords = screensSec ? wordsIn(screensSec, '.screens__head .cw', 0.38, 0.10, 800) : [];
+  const sItems = screensSec
+    ? [...screensSec.querySelectorAll('.screen-item')].map((it, bi) => ({
+        el: it,
+        media: it.querySelector('.screen-item__media'),
+        words: wordsIn(it, '.cw', 0.30, 0.06, 820 + bi * 40),
+        fr: [...it.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.40 + i * 0.045 })),
+      }))
+    : [];
+
+  function fadeRise(m, p, travel) {
+    const tr = easeOut(seg(p, m.rs, m.rs + 0.10));
+    const st = m.el.style;
+    st.opacity = tr.toFixed(3);
+    st.transform = tr >= 1 ? '' : `translate3d(0, ${((1 - tr) * travel).toFixed(1)}px, 0)`;
+  }
+
+  function sectionE(el) {
+    const vh = window.innerHeight;
+    // 1.05 viewports of travel (was 0.85) — fast scroll compressed the whole
+    // cascade into a blink (client rev)
+    return clamp01((vh - el.getBoundingClientRect().top) / (vh * 1.05));
+  }
+
+  let qS = null, shS = null;
+  const siS = [null, null, null];
+  let lastQSKey = '';
+  function updateQuoteScreens(dt, snap) {
+    const sm = (cur, raw) => {
+      if (cur === null || snap || REDUCED) return raw;
+      const n = cur + (raw - cur) * (1 - Math.exp(-dt * 6.5));
+      return Math.abs(raw - n) < 0.0004 ? raw : n;
+    };
+    if (quoteSec) qS = sm(qS, sectionE(quoteSec));
+    if (screensSec) {
+      shS = sm(shS, sectionE(screensSec));
+      sItems.forEach((s, i) => { siS[i] = sm(siS[i], sectionE(s.el)); });
+    }
+    const key = [qS, shS, ...siS].map((v) => (v === null ? 'x' : v.toFixed(4))).join('|');
+    if (key === lastQSKey) return;
+    lastQSKey = key;
+    const travel = 38 * u();
+    if (quoteSec) {
+      for (const m of qWords) sweepWord(m, qS, CE_RISE, CE_LAG, CE_FILL, travel);
+      for (const m of qFr) fadeRise(m, qS, travel);
+      imgGooSet(quoteMedia, seg(qS, 0.20, 0.75), COVER_GREY.css, COVER_GREY.vec);
+    }
+    for (const m of sHeadWords) sweepWord(m, shS, CE_RISE, CE_LAG, CE_FILL, travel);
+    sItems.forEach((s, i) => {
+      const E = siS[i];
+      for (const m of s.words) sweepWord(m, E, CE_RISE, CE_LAG, CE_FILL, travel);
+      for (const m of s.fr) fadeRise(m, E, travel);
+      imgGooSet(s.media, seg(E, 0.28, 0.80), COVER_WHITE.css, COVER_WHITE.vec);
+    });
+  }
+
   // the map ride itself is scroll-driven (reversible), anchored to the band
   function mapAnimProgress() {
     if (!mapStage) return 0;
     const vh = window.innerHeight;
     const r = mapStage.getBoundingClientRect();
-    const endTop = Math.max(vh * 0.10, vh - r.height - 140 * u());
+    const endTop = Math.max(vh * 0.05, vh - r.height - 24 * u());
     return clamp01((vh - r.top) / Math.max(1, vh - endTop));
   }
 
@@ -1674,6 +1861,7 @@
     update(Ps, ts, dt);
     updateCrisis(Es, Cs);
     updateMap(Ms);
+    updateQuoteScreens(dt, wheelDriving);
     if (window.colmezMap) window.colmezMap.set(As);
     requestAnimationFrame(loop);
   }
@@ -1696,7 +1884,7 @@
       resizeCtaFx();
       resizeMiniFx();
       layoutWords();
-      lastTextP = -1; lastHeroP = -1; lastNavT = -1; lastPatKey = ''; lastCrisisKey = '';
+      lastTextP = -1; lastHeroP = -1; lastNavT = -1; lastPatKey = ''; lastCrisisKey = ''; lastQSKey = '';
       dirty = true;
     });
   }
