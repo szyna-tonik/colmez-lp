@@ -34,6 +34,9 @@
 
   /* scroll room for the pinned crisis accordion (two hand-over phases) */
   --crisis-track: 200vh;
+
+  /* scroll room for the pinned team carousel (three member hand-overs) */
+  --team-track: 210vh;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -442,11 +445,12 @@ a { color: inherit; text-decoration: none; }
   background-repeat: no-repeat;
 }
 .crisis .cw--gold { --wbase: var(--c-gold-500); }
-/* light section: black ink sweeps in, tail melts into the white bg */
-.screens .cw { --wbase: var(--c-black); --wtail: #fff; }
+/* light sections: black ink sweeps in, tail melts into the section bg */
+.screens .cw, .security .cw { --wbase: var(--c-black); --wtail: #fff; }
+.team .cw { --wbase: var(--c-black); --wtail: #ebebeb; }
 .screen-item__chip .cw { --wbase: var(--c-white); --wtail: var(--c-gold-500); }
 /* fade-rise lines (subs, list rows, roles) — driven like the words, no fill */
-.quote .fr, .screens .fr { opacity: 0; will-change: transform, opacity; }
+.quote .fr, .screens .fr, .security .fr, .team .fr { opacity: 0; will-change: transform, opacity; }
 
 /* ---------- MAP (Figma 9249:1707 + colmez-hero-map-brief.md) ---------- */
 
@@ -596,7 +600,10 @@ a { color: inherit; text-decoration: none; }
   width: 100%;
   height: 100%;
   pointer-events: none;
+  z-index: 2;
 }
+/* washed-photo layer (team carousel) sits UNDER the entry cover */
+.ggoo--wash { z-index: 1; }
 /* while the goo drives, the CSS shimmer ::after (kept as no-WebGL fallback)
    steps aside — doubled class beats the per-section ::after rules that come
    later in the file */
@@ -692,7 +699,7 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   background: #fff;
   color: var(--c-black);
-  padding: calc(150 * var(--u)) 0 calc(451 * var(--u));
+  padding: calc(150 * var(--u)) 0 0; /* the bottom run continues in .security */
 }
 .screens__head {
   margin: 0 0 calc(149 * var(--u)) calc(40 * var(--u));
@@ -798,3 +805,150 @@ a { color: inherit; text-decoration: none; }
     #fff calc(var(--ifill) + 26%),
     #fff 100%);
 }
+
+/* ---------- SECURITY (Figma 9286:337) ---------- */
+/* white continuation of the screens run: gold chip + claim + SOC2 badge */
+.security {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  color: var(--c-black);
+  padding: calc(241 * var(--u)) calc(40 * var(--u)) calc(200 * var(--u));
+}
+.security__left {
+  display: flex;
+  gap: calc(32 * var(--u));
+  align-items: flex-start;
+}
+.security__head {
+  margin: 0;
+  width: calc(718 * var(--u));
+  font-size: calc(48 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.security__badge {
+  flex: 0 0 auto;
+  width: calc(220 * var(--u));
+  height: calc(220 * var(--u));
+  /* optically centred in the run between the heading's right edge (890u)
+     and the page edge: (1496-890-220)/2 = 193u each side, minus the 40u
+     section padding */
+  margin-right: calc(153 * var(--u));
+}
+
+/* ---------- TEAM (Figma 9286:278) ---------- */
+.team {
+  position: relative;
+  height: calc(1216 * var(--u) + var(--team-track));
+}
+/* the 1216u band pins centred in the viewport while the carousel scrubs */
+.team__pin {
+  position: sticky;
+  top: calc((100vh - 1216 * var(--u)) / 2);
+  height: calc(1216 * var(--u));
+  background: #ebebeb;
+  color: var(--c-black);
+  overflow: hidden;
+}
+.team__head {
+  position: absolute;
+  left: calc(40 * var(--u));
+  top: calc(150 * var(--u));
+  margin: 0;
+  width: calc(578 * var(--u));
+  font-size: calc(56 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.team__name {
+  margin: 0;
+  font-size: calc(32 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.team__chip {
+  display: flex;
+  align-items: flex-end;
+  height: calc(26 * var(--u));
+  padding: calc(4 * var(--u)) calc(8 * var(--u));
+  background: var(--c-grey-200);
+  color: var(--c-white);
+  font-size: calc(10 * var(--u));
+  line-height: 1;
+  font-weight: 600;
+}
+.team__bio {
+  position: absolute;
+  left: calc(997 * var(--u));
+  top: calc(599 * var(--u));
+  width: calc(459 * var(--u));
+}
+/* stacked bio variants; the carousel crossfades them (JS drives opacity) */
+.team__bio-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(32 * var(--u));
+}
+.team__bio-item:not(:first-child) { opacity: 0; visibility: hidden; }
+.team__desc { margin: 0; font-size: calc(20 * var(--u)); line-height: 1; font-weight: 400; }
+.team__logos {
+  display: flex;
+  flex-direction: column;
+  gap: calc(24.7 * var(--u));
+  width: 100%;
+}
+.team__logos-row { display: flex; align-items: center; gap: calc(29 * var(--u)); }
+.team__logos img { height: auto; width: auto; display: block; }
+.team__list {
+  position: absolute;
+  left: calc(40 * var(--u));
+  top: calc(599 * var(--u));
+  width: calc(339 * var(--u));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(24 * var(--u));
+}
+.team__list li { cursor: pointer; }
+.team__list li:not(.is-active) { opacity: 0.2; } /* dimmed queue; the inner .fr fades within */
+.team__list li > div {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12 * var(--u));
+  align-items: flex-start;
+}
+/* portrait strip: a centred vertical column on the page axis; the carousel
+   translates it so the active member's portrait (grown to 380x458) sits at
+   599u while the neighbours rest at 285x343.5 (JS drives size + offset) */
+.team__strip {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, calc(370 * var(--u))); /* rest pose: member 0 centred */
+  width: calc(380 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(20 * var(--u));
+}
+.team__photo {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(285 * var(--u));
+  height: calc(343.5 * var(--u));
+  background: var(--c-black);
+  overflow: hidden;
+}
+.team__photo img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.team__photo:first-child { width: calc(380 * var(--u)); height: calc(458 * var(--u)); }

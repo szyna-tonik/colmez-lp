@@ -41,10 +41,14 @@ Then open http://localhost:8000
    (d3 + topojson, `map.js`), state hover runs the logo's melt shader over the whole map.
 5. **Quote** — advisor pull quote with photo goo-reveal.
 6. **Screens** — white band, three product feature rows; the fixed nav logo rides
-   `mix-blend-mode: difference` so it inverts over the light section.
+   `mix-blend-mode: difference` so it inverts over the light sections.
+7. **Security** — closing claim of the features block with the AICPA SOC 2 badge.
+8. **Team** — pinned scroll carousel: portraits grow and re-centre, names activate
+   (clickable), bios swap; inactive portraits sit under a washed-grey goo cover.
+   Copy, roles and logos pulled from the live colmez.com Team section.
 
 ## Status
 
 Work in progress. Open items: final copy for crisis subhead 002, the $50B figure in 003,
 final product screenshots for the Screens rows (one placeholder shot ×3), section after
-Screens (black tail in Figma), mobile layout, real "Book a meeting" target.
+Team (black tail in Figma), mobile layout, real "Book a meeting" target.

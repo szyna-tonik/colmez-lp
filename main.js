@@ -1321,6 +1321,8 @@
     uniform float uP;
     uniform vec3 uGold;
     uniform vec3 uCover;
+    uniform sampler2D uTex;
+    uniform float uUseTex;
     ${GLSL_NOISE}
     void main(){
       float sa = uRes.x / uRes.y;
@@ -1339,7 +1341,15 @@
       float rim = smoothstep(0.74, 1.0, e) * (1.0 - smoothstep(1.0, 1.2, e));
       float a = max(1.0 - vis, rim * 0.85);
       if (a <= 0.002) { gl_FragColor = vec4(0.0); return; }
-      vec3 col = mix(uCover, uGold, clamp(rim * 0.9, 0.0, 1.0));
+      vec3 cov = uCover;
+      if (uUseTex > 0.5) {
+        // washed take on the photo itself: grey, lifted, low contrast — the
+        // goo holes then reveal the original underneath (team carousel)
+        vec3 tc = texture2D(uTex, vUv).rgb;
+        float lu = dot(tc, vec3(0.299, 0.587, 0.114));
+        cov = mix(vec3(lu), vec3(0.78), 0.55);
+      }
+      vec3 col = mix(cov, uGold, clamp(rim * 0.9, 0.0, 1.0));
       gl_FragColor = vec4(col * a, a);
     }`;
 
@@ -1375,6 +1385,11 @@
     igl.vertexAttribPointer(0, 2, igl.FLOAT, false, 0, 0);
     igl.useProgram(prog);
     igl.uniform3fv(uni.uGold, GOLD);
+    igl.uniform1i(uni.uTex, 0);
+    const wt = igl.createTexture();
+    igl.bindTexture(igl.TEXTURE_2D, wt);
+    igl.texImage2D(igl.TEXTURE_2D, 0, igl.RGB, 1, 1, 0, igl.RGB, igl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255]));
+    pImg.white = wt;
   }
 
   const igMedia = new Map(); // mediaEl -> { cv, g, p }
@@ -1406,6 +1421,8 @@
     if (igCv.width !== rw || igCv.height !== rh) { igCv.width = rw; igCv.height = rh; }
     igl.viewport(0, 0, rw, rh);
     igl.useProgram(pImg.prog);
+    igl.bindTexture(igl.TEXTURE_2D, pImg.white);
+    igl.uniform1f(pImg.uni.uUseTex, 0);
     igl.uniform2f(pImg.uni.uRes, rw, rh);
     igl.uniform1f(pImg.uni.uP, easeInOut(p));
     igl.uniform3fv(pImg.uni.uCover, coverVec);
@@ -1415,9 +1432,68 @@
     st.g.clearRect(0, 0, rw, rh);
     st.g.drawImage(igCv, 0, 0);
   }
+
+  // photo-cover variant: the eroding cover is the photo itself, washed grey
+  // in-shader; the holes reveal the untouched image underneath. Own overlay
+  // (.ggoo--wash) UNDER the entry cover, own texture per media.
+  const igMedia2 = new Map();
+  function imgGooTexSet(media, img, p) {
+    p = clamp01(p);
+    if (!igl && !igFail) initImgGoo();
+    if (igFail) { // no WebGL: plain CSS wash toggle
+      media.style.filter = p >= 0.5 ? '' : 'grayscale(1) contrast(0.6) brightness(1.3)';
+      return;
+    }
+    let st = igMedia2.get(media);
+    if (!st) {
+      const cv = document.createElement('canvas');
+      cv.className = 'ggoo ggoo--wash';
+      cv.setAttribute('aria-hidden', 'true');
+      media.appendChild(cv);
+      st = { cv, g: cv.getContext('2d'), p: -1, tex: null, key: '' };
+      igMedia2.set(media, st);
+    }
+    if (p === st.p) return;
+    st.p = p;
+    const w = media.clientWidth, h = media.clientHeight;
+    if (!w || !h) { st.p = -1; return; }
+    const rw = Math.min(720, Math.round(w)), rh = Math.max(2, Math.round(rw * h / w));
+    if (st.cv.width !== rw || st.cv.height !== rh) { st.cv.width = rw; st.cv.height = rh; }
+    if (p >= 1) { st.g.clearRect(0, 0, rw, rh); return; }
+    if (!img.complete || !img.naturalWidth) { st.p = -1; return; }
+    const key = rw + 'x' + rh + '|' + (img.currentSrc || img.src);
+    if (st.key !== key) { // cover-crop the photo into the texture (centre-top)
+      const tc = document.createElement('canvas');
+      tc.width = rw; tc.height = rh;
+      const sc = Math.max(rw / img.naturalWidth, rh / img.naturalHeight);
+      tc.getContext('2d').drawImage(img, (rw - img.naturalWidth * sc) / 2, 0, img.naturalWidth * sc, img.naturalHeight * sc);
+      if (!st.tex) st.tex = igl.createTexture();
+      igl.bindTexture(igl.TEXTURE_2D, st.tex);
+      igl.texParameteri(igl.TEXTURE_2D, igl.TEXTURE_WRAP_S, igl.CLAMP_TO_EDGE);
+      igl.texParameteri(igl.TEXTURE_2D, igl.TEXTURE_WRAP_T, igl.CLAMP_TO_EDGE);
+      igl.texParameteri(igl.TEXTURE_2D, igl.TEXTURE_MIN_FILTER, igl.LINEAR);
+      igl.texParameteri(igl.TEXTURE_2D, igl.TEXTURE_MAG_FILTER, igl.LINEAR);
+      igl.texImage2D(igl.TEXTURE_2D, 0, igl.RGB, igl.RGB, igl.UNSIGNED_BYTE, tc);
+      st.key = key;
+    }
+    if (igCv.width !== rw || igCv.height !== rh) { igCv.width = rw; igCv.height = rh; }
+    igl.viewport(0, 0, rw, rh);
+    igl.useProgram(pImg.prog);
+    igl.bindTexture(igl.TEXTURE_2D, st.tex);
+    igl.uniform1f(pImg.uni.uUseTex, 1);
+    igl.uniform2f(pImg.uni.uRes, rw, rh);
+    igl.uniform1f(pImg.uni.uP, easeInOut(p));
+    igl.uniform3fv(pImg.uni.uCover, COVER_EB.vec);
+    igl.clearColor(0, 0, 0, 0);
+    igl.clear(igl.COLOR_BUFFER_BIT);
+    igl.drawArrays(igl.TRIANGLES, 0, 6);
+    st.g.clearRect(0, 0, rw, rh);
+    st.g.drawImage(igCv, 0, 0);
+  }
   const COVER_BLACK = { css: '#121212', vec: [0x12 / 255, 0x12 / 255, 0x12 / 255] };
   const COVER_GREY = { css: '#313131', vec: [0x31 / 255, 0x31 / 255, 0x31 / 255] };
   const COVER_WHITE = { css: '#ffffff', vec: [1, 1, 1] };
+  const COVER_EB = { css: '#ebebeb', vec: [0xeb / 255, 0xeb / 255, 0xeb / 255] };
 
   // ---------- crisis section (pinned accordion) ----------
   // E: entry — section top rides viewport-bottom → pin engage; every word
@@ -1565,7 +1641,93 @@
     return clamp01((vh - el.getBoundingClientRect().top) / (vh * 1.05));
   }
 
-  let qS = null, shS = null;
+  // security + team ride the same per-section entry drive
+  const securitySec = $('security');
+  const secWords = securitySec ? wordsIn(securitySec, '.cw', 0.35, 0.10, 900) : [];
+  const secFr = securitySec ? [...securitySec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.52 + i * 0.05 })) : [];
+  const teamSec = $('team');
+  const teamWords = teamSec
+    ? [...wordsIn(teamSec, '.team__head .cw', 0.30, 0.10, 950),
+       ...wordsIn(teamSec, '.team__list .is-active .team__name .cw', 0.46, 0.04, 970)]
+    : [];
+  const teamFr = teamSec ? [...teamSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.48 + i * 0.04 })) : [];
+  // strip photos top->bottom = the member order; the active portrait leads
+  const TP_W = [[0.28, 0.62], [0.44, 0.76], [0.55, 0.85], [0.62, 0.92]];
+  const teamPhotos = teamSec ? [...teamSec.querySelectorAll('.team__photo')].map((el, i) => ({ el, w: TP_W[i] || [0.3, 0.65] })) : [];
+
+  // ---------- team member carousel (pinned) ----------
+  // T = pinned progress over --team-track; three eased hand-over windows sum
+  // into a continuous active index `act` (0..3). Per member: the portrait
+  // grows 285x343.5 <-> 380x458, the strip re-centres the active portrait at
+  // 599u, the list entry brightens 0.2 <-> 1, and the bios crossfade (both
+  // sides dip to 0 around a hand-over midpoint, so texts never overlap).
+  const teamPin = teamSec ? teamSec.querySelector('.team__pin') : null;
+  const TEAM = teamSec ? {
+    lis: [...teamSec.querySelectorAll('.team__list li')],
+    chips: [...teamSec.querySelectorAll('.team__list .team__chip')],
+    bios: [...teamSec.querySelectorAll('.team__bio-item')],
+    strip: teamSec.querySelector('.team__strip'),
+    imgs: [...teamSec.querySelectorAll('.team__photo img')],
+  } : null;
+  const TW_WIN = [[0.06, 0.30], [0.38, 0.62], [0.70, 0.94]];
+
+  // click a name -> smooth-scroll the pin to that member's plateau (the
+  // native smooth scroll is picked up as an external scroll and resynced)
+  const TEAM_T = [0.02, 0.34, 0.66, 0.98];
+  if (TEAM) TEAM.lis.forEach((li, i) => li.addEventListener('click', () => {
+    const pinH = teamPin.offsetHeight;
+    const Ts = (window.innerHeight - pinH) / 2;
+    const y = teamSec.offsetTop - Ts + TEAM_T[i] * (teamSec.offsetHeight - pinH);
+    window.scrollTo({ top: y, behavior: 'smooth' });
+  }));
+
+  function teamT() {
+    if (!teamPin) return 0;
+    const vh = window.innerHeight;
+    const pinH = teamPin.offsetHeight;
+    const Ts = (vh - pinH) / 2; // mirrors the sticky top in styles.css
+    const top = teamSec.getBoundingClientRect().top;
+    return clamp01((Ts - top) / Math.max(1, teamSec.offsetHeight - pinH));
+  }
+
+  function updateTeamCarousel(T) {
+    if (!TEAM) return;
+    const k = u();
+    let act = 0;
+    for (const w of TW_WIN) act += easeInOut(seg(T, w[0], w[1]));
+    const n = teamPhotos.length;
+    const hs = [];
+    for (let i = 0; i < n; i++) {
+      const wgt = clamp01(1 - Math.abs(act - i));
+      const ph = lerp(343.5, 458, wgt) * k;
+      const st = teamPhotos[i].el.style;
+      st.width = (lerp(285, 380, wgt) * k).toFixed(2) + 'px';
+      st.height = ph.toFixed(2) + 'px';
+      hs.push(ph);
+      if (TEAM.lis[i]) TEAM.lis[i].style.opacity = lerp(0.2, 1, wgt).toFixed(3);
+      // active badge takes the CTA gold (grey-200 -> gold-500)
+      if (TEAM.chips[i]) TEAM.chips[i].style.background =
+        'rgb(' + Math.round(lerp(115, 174, wgt)) + ',' + Math.round(lerp(115, 154, wgt)) + ',' + Math.round(lerp(115, 41, wgt)) + ')';
+      // inactive portraits sit under a washed-grey take of themselves; the
+      // activation opens goo holes onto the original
+      if (TEAM.imgs[i]) imgGooTexSet(teamPhotos[i].el, TEAM.imgs[i], wgt);
+      if (TEAM.bios[i]) {
+        const op = seg(wgt, 0.5, 0.95);
+        const bs = TEAM.bios[i].style;
+        bs.opacity = op.toFixed(3);
+        bs.visibility = op <= 0 ? 'hidden' : 'visible';
+      }
+    }
+    const gap = 20 * k;
+    const centers = [];
+    let y = 0;
+    for (let i = 0; i < n; i++) { centers.push(y + hs[i] / 2); y += hs[i] + gap; }
+    const i0 = Math.min(n - 1, Math.floor(act)), i1 = Math.min(n - 1, i0 + 1);
+    const cAct = lerp(centers[i0], centers[i1], act - i0);
+    TEAM.strip.style.transform = 'translate(-50%, ' + (599 * k - cAct).toFixed(2) + 'px)';
+  }
+
+  let qS = null, shS = null, seS = null, teS = null, teTs = null;
   const siS = [null, null, null];
   let lastQSKey = '';
   function updateQuoteScreens(dt, snap) {
@@ -1579,7 +1741,9 @@
       shS = sm(shS, sectionE(screensSec));
       sItems.forEach((s, i) => { siS[i] = sm(siS[i], sectionE(s.el)); });
     }
-    const key = [qS, shS, ...siS].map((v) => (v === null ? 'x' : v.toFixed(4))).join('|');
+    if (securitySec) seS = sm(seS, sectionE(securitySec));
+    if (teamSec) { teS = sm(teS, sectionE(teamSec)); teTs = sm(teTs, teamT()); }
+    const key = [qS, shS, seS, teS, teTs, ...siS].map((v) => (v === null ? 'x' : v.toFixed(4))).join('|');
     if (key === lastQSKey) return;
     lastQSKey = key;
     const travel = 38 * u();
@@ -1595,6 +1759,13 @@
       for (const m of s.fr) fadeRise(m, E, travel);
       imgGooSet(s.media, seg(E, 0.28, 0.80), COVER_WHITE.css, COVER_WHITE.vec);
     });
+    for (const m of secWords) sweepWord(m, seS, CE_RISE, CE_LAG, CE_FILL, travel);
+    for (const m of secFr) fadeRise(m, seS, travel);
+    for (const m of teamWords) sweepWord(m, teS, CE_RISE, CE_LAG, CE_FILL, travel);
+    for (const m of teamFr) fadeRise(m, teS, travel);
+    for (const p of teamPhotos)
+      imgGooSet(p.el, seg(teS, p.w[0], p.w[1]), COVER_EB.css, COVER_EB.vec);
+    updateTeamCarousel(teTs);
   }
 
   // the map ride itself is scroll-driven (reversible), anchored to the band

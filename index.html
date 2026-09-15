@@ -227,6 +227,91 @@
     </div>
   </section>
 
+  <!-- SECURITY (Figma 9286:337): closing row of the features block. The Figma
+       frame is 1306 wide (looks unstretched) — the badge is aligned to the
+       page's 40u content margin instead, like every other right edge. -->
+  <section class="security" id="security">
+    <div class="security__left">
+      <span class="screen-item__num"><span class="screen-item__chip"><span class="cw">Security</span></span></span>
+      <h3 class="security__head"><span class="cw">Colmez</span> <span class="cw">never</span> <span class="cw">trains</span> <span class="cw">on</span> <span class="cw">one</span> <span class="cw">operator's</span> <span class="cw">data</span> <span class="cw">for</span> <span class="cw">another,</span> <span class="cw">and</span> <span class="cw">never</span> <span class="cw">competes</span> <span class="cw">for</span> <span class="cw">your</span> <span class="cw">accounts.</span></h3>
+    </div>
+    <img class="security__badge fr" src="assets/img/security-badge.svg" alt="AICPA SOC 2 badge" width="220" height="220">
+  </section>
+
+  <!-- TEAM (Figma 9286:278 layout + live-site content): pinned member
+       carousel — scroll cycles the portrait strip, activates the name in the
+       list and swaps the bio. Copy, roles and logos pulled from colmez.com
+       (the Figma "CTO" on Rayhan was a placeholder — the site says CEO). -->
+  <section class="team" id="team">
+    <div class="team__pin">
+      <h2 class="team__head"><span class="cw">Built</span> <span class="cw">with</span> <span class="cw">the</span> <span class="cw">people</span><br><span class="cw">who</span> <span class="cw">ran</span> <span class="cw">this</span> <span class="cw">industry.</span></h2>
+      <ul class="team__list">
+        <li class="is-active"><div>
+          <h3 class="team__name"><span class="cw">Rayhan</span> <span class="cw">Razzak</span></h3>
+          <span class="team__chip fr">CEO</span>
+        </div></li>
+        <li><div class="fr"><span class="team__name">Brian Meng</span><span class="team__chip">CTO</span></div></li>
+        <li><div class="fr"><span class="team__name">Numair Razzak</span><span class="team__chip">COO</span></div></li>
+        <li><div class="fr"><span class="team__name">Jeff Feeler</span><span class="team__chip">Strategic Advisor</span></div></li>
+      </ul>
+      <div class="team__bio">
+        <div class="team__bio-item">
+          <p class="team__desc fr">Rayhan studied at Stanford and built quantitative systems in trading and medicine.</p>
+          <div class="team__logos fr">
+            <div class="team__logos-row">
+              <img src="assets/img/logo-stanford.png" alt="Stanford University" style="width: calc(82.5 * var(--u))">
+              <img src="assets/img/logo-susquehanna.png" alt="Susquehanna" style="width: calc(190.3 * var(--u))">
+            </div>
+            <div class="team__logos-row">
+              <img src="assets/img/logo-peak6.png" alt="PEAK6" style="width: calc(81 * var(--u))">
+              <img src="assets/img/logo-stanford-med.png" alt="Stanford Medicine" style="width: calc(180.5 * var(--u))">
+            </div>
+          </div>
+        </div>
+        <div class="team__bio-item">
+          <p class="team__desc">Brian studied at Berkeley and built machine learning systems for Boeing and SIG.</p>
+          <div class="team__logos">
+            <div class="team__logos-row">
+              <img src="assets/img/logo-uc-berkeley.png" alt="UC Berkeley" style="height: calc(18 * var(--u))">
+              <img src="assets/img/logo-boeing.png" alt="Boeing" style="height: calc(22 * var(--u))">
+            </div>
+            <div class="team__logos-row">
+              <img src="assets/img/logo-bair.png" alt="Berkeley Artificial Intelligence Research" style="height: calc(26 * var(--u))">
+              <img src="assets/img/logo-susquehanna.png" alt="Susquehanna" style="width: calc(190.3 * var(--u))">
+            </div>
+          </div>
+        </div>
+        <div class="team__bio-item">
+          <p class="team__desc">Numair studied at Stanford and invested in and advised environmental services companies.</p>
+          <div class="team__logos">
+            <div class="team__logos-row">
+              <img src="assets/img/logo-stanford.png" alt="Stanford University" style="width: calc(82.5 * var(--u))">
+              <img src="assets/img/logo-antin.png" alt="Antin Infrastructure Partners" style="height: calc(20 * var(--u))">
+              <img src="assets/img/logo-nomura-greentech.png" alt="Nomura Greentech" style="height: calc(26 * var(--u))">
+              <img src="assets/img/logo-ares.png" alt="Ares" style="height: calc(18 * var(--u))">
+            </div>
+          </div>
+        </div>
+        <div class="team__bio-item">
+          <p class="team__desc">Jeff led US Ecology as Chairman, President and CEO and now advises industry boards.</p>
+          <div class="team__logos">
+            <div class="team__logos-row">
+              <img src="assets/img/logo-us-ecology.png" alt="US Ecology" style="height: calc(32 * var(--u))">
+              <img src="assets/img/logo-tetra-tech.png" alt="Tetra Tech" style="height: calc(24 * var(--u))">
+              <img src="assets/img/logo-milestone-environmental.png" alt="Milestone Environmental" style="height: calc(30 * var(--u))">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="team__strip">
+        <div class="team__photo"><img src="assets/img/team-rayhan.png" alt="Rayhan Razzak"></div>
+        <div class="team__photo"><img src="assets/img/team-brian.png" alt="Brian Meng"></div>
+        <div class="team__photo"><img src="assets/img/team-numair.png" alt="Numair Razzak"></div>
+        <div class="team__photo"><img src="assets/img/team-jeff.png" alt="Jeff Feeler"></div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
