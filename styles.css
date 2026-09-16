@@ -1089,8 +1089,21 @@ a { color: inherit; text-decoration: none; }
 }
 .footer__backed { display: flex; align-items: center; gap: calc(18 * var(--u)); }
 .footer__backed img { width: calc(141.667 * var(--u)); height: calc(20 * var(--u)); display: block; }
-a.footer__link { transition: opacity 0.2s ease; }
-a.footer__link:hover { opacity: 0.6; }
+a.footer__link { transition: opacity 0.22s ease; }
+a.footer__link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.08em;
+  height: 1px;
+  background: var(--c-white);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.28s cubic-bezier(0.61, 0, 0.2, 1);
+}
+a.footer__link:hover { opacity: 0.7; }
+a.footer__link:hover::after { transform: scaleX(1); }
 
 /* ---------- CTA hover (global: hero, compact nav and footer) ----------
    The label re-runs the page's own gold sweep, the arrow flies out of the
@@ -1138,23 +1151,31 @@ a.footer__link:hover { opacity: 0.6; }
 .cta:hover .cta__label,
 .footer__cta:hover .cta__label { animation: ctaWash 0.55s cubic-bezier(0.33, 0, 0.2, 1) forwards; }
 
-/* the arrow leaves the button; its replacement drops in from the left */
+/* The arrow leaves the button and a replacement drops into its place. BOTH
+   arrows are pseudo-elements of a span that never moves — animating the span
+   itself dragged the replacement out with it. The span keeps its own glyph
+   only for layout, painted transparent. */
 .cta__arrow {
   position: relative;
   display: inline-block;
-  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1);
+  color: transparent;
 }
-.cta__arrow::after { /* the replacement waits off to the left, invisible */
+.cta__arrow::before,
+.cta__arrow::after {
   content: "→";
   position: absolute;
   left: 0;
   top: 0;
+  color: var(--c-white);
+  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1);
+}
+.cta__arrow::after { /* the replacement waits off to the left, invisible */
   opacity: 0;
   transform: translateX(-240%);
   transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1), opacity 0s 0.42s;
 }
-.cta:hover .cta__arrow,
-.footer__cta:hover .cta__arrow { transform: translateX(300%); }
+.cta:hover .cta__arrow::before,
+.footer__cta:hover .cta__arrow::before { transform: translateX(300%); }
 .cta:hover .cta__arrow::after,
 .footer__cta:hover .cta__arrow::after {
   opacity: 1;
@@ -1164,6 +1185,6 @@ a.footer__link:hover { opacity: 0.6; }
 
 @media (prefers-reduced-motion: reduce) {
   .cta::before, .footer__cta::before,
-  .cta__arrow, .cta__arrow::after { transition: none; }
+  .cta__arrow::before, .cta__arrow::after { transition: none; }
   .cta:hover .cta__label, .footer__cta:hover .cta__label { animation: none; }
 }
