@@ -1642,7 +1642,7 @@
   const quoteMedia = quoteSec ? quoteSec.querySelector('.quote__media') : null;
   const quoteText = quoteSec ? quoteSec.querySelector('.quote__text') : null;
   const qWords = quoteSec ? wordsIn(quoteSec, '.quote__name .cw', 0.56, 0.03, 730) : [];
-  addReveal(quoteMedia, COVER_GREY);
+  addReveal(quoteMedia, COVER_GREY, 0, 700); // the quote reads first, then Jeff forms
   const qFr = quoteSec
     ? [...quoteSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.60 + i * 0.04 }))
     : [];
@@ -1739,10 +1739,10 @@
     if (!TEAM) return;
     const k = u();
     if (TEAM.head) {
+      // it just scrolls away with the section and fades — the extra ride up
+      // read as a separate moving object (client rev)
       const x = teamHeadExit();
-      const hy = easeInOut(x) * (150 * k + TEAM.head.offsetHeight + 40 * k);
-      TEAM.head.style.transform = x <= 0 ? '' : `translate3d(0, ${(-hy).toFixed(1)}px, 0)`;
-      TEAM.head.style.opacity = (1 - seg(x, 0.60, 1)).toFixed(3);
+      TEAM.head.style.opacity = (1 - easeInOut(seg(x, 0.50, 1))).toFixed(3);
     }
     let act = 0;
     for (const w of TW_WIN) act += easeInOut(seg(T, w[0], w[1]));
@@ -1750,7 +1750,8 @@
     // the active photo's reveal runs on its OWN clock: a fast scrub used to
     // play the whole wash->original in a blink (client rev)
     const ai = Math.max(0, Math.min(n - 1, Math.round(act)));
-    const kw = dt ? 1 - Math.exp(-dt * 1.8) : 1;
+    const kRise = dt ? 1 - Math.exp(-dt * 1.8) : 1;  // reveal: calm
+    const kFall = dt ? 1 - Math.exp(-dt * 5.0) : 1;  // wash-out: quick, it must not linger
     const hs = [];
     for (let i = 0; i < n; i++) {
       const wgt = clamp01(1 - Math.abs(act - i));
@@ -1765,8 +1766,12 @@
         'rgb(' + Math.round(lerp(115, 174, wgt)) + ',' + Math.round(lerp(115, 154, wgt)) + ',' + Math.round(lerp(115, 41, wgt)) + ')';
       // inactive portraits sit under a washed-grey take of themselves; the
       // activation opens goo holes onto the original
-      washW[i] += ((i === ai ? 1 : 0) - washW[i]) * kw;
-      if (Math.abs(washW[i] - (i === ai ? 1 : 0)) < 0.002) washW[i] = i === ai ? 1 : 0;
+      const tgt = i === ai ? 1 : 0;
+      washW[i] += (tgt - washW[i]) * (tgt < washW[i] ? kFall : kRise);
+      // leaving a plateau the wash never trails the scrub (client: the
+      // active->inactive change landed too late and pulled the eye back)
+      if (i !== ai) washW[i] = Math.min(washW[i], wgt * 1.15);
+      if (Math.abs(washW[i] - tgt) < 0.002) washW[i] = tgt;
       if (TEAM.imgs[i]) imgGooTexSet(teamPhotos[i].el, TEAM.imgs[i], washW[i]);
       if (TEAM.bios[i]) {
         const op = seg(wgt, 0.5, 0.95);

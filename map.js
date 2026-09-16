@@ -636,9 +636,11 @@
 
     if (PH.leg > 0) {
       // raised + 10% larger (user rev)
-      const x = Math.max(32, OX), y = H - 72, bw = 163, bh = 6;
-      ctx.globalAlpha = PH.leg * (1 - 0.5 * dim);
-      ctx.font = '500 10px "Overused Grotesk", system-ui, sans-serif';
+      // hover no longer dims it — it grows a touch instead (client rev)
+      const lg = 1 + 0.14 * dim;
+      const x = Math.max(32, OX), y = H - 72, bw = 163 * lg, bh = 6 * lg;
+      ctx.globalAlpha = PH.leg;
+      ctx.font = '500 ' + (10 * lg).toFixed(2) + 'px "Overused Grotesk", system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = C.grey;
@@ -647,11 +649,11 @@
       g.addColorStop(0, C.red);
       g.addColorStop(1, C.prodGold);
       ctx.fillStyle = g;
-      ctx.fillRect(x, y + 9, bw, bh);
+      ctx.fillRect(x, y + 9 * lg, bw, bh);
       ctx.fillStyle = C.grey7;
-      ctx.fillText('0% · WEAK', x, y + 29);
+      ctx.fillText('0% · WEAK', x, y + 29 * lg);
       ctx.textAlign = 'right';
-      ctx.fillText('STRONG · 100%', x + bw, y + 29);
+      ctx.fillText('STRONG · 100%', x + bw, y + 29 * lg);
       ctx.globalAlpha = 1;
     }
 
