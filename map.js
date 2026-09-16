@@ -636,8 +636,9 @@
 
     if (PH.leg > 0) {
       // raised + 10% larger (user rev)
-      // hover no longer dims it — it grows a touch instead (client rev)
-      const lg = 1 + 0.14 * dim;
+      // client rev: the bigger, undimmed treatment is now the ONLY state —
+      // hover neither fades nor scales it
+      const lg = 1.14;
       const x = Math.max(32, OX), y = H - 72, bw = 163 * lg, bh = 6 * lg;
       ctx.globalAlpha = PH.leg;
       ctx.font = '500 ' + (10 * lg).toFixed(2) + 'px "Overused Grotesk", system-ui, sans-serif';

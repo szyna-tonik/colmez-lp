@@ -1641,14 +1641,18 @@
     for (const e of ents) {
       if (!e.isIntersecting) continue;
       const st = RVL.find((r) => r.el === e.target);
-      if (st && st.t0 < 0) st.t0 = performance.now() + st.delay;
       rvlObs.unobserve(e.target);
+      if (!st || st.t0 >= 0) continue;
+      // a group forms as one image: the first member to show starts them all
+      for (const r of RVL) if (r === st || (st.group && r.group === st.group)) {
+        if (r.t0 < 0) { r.t0 = performance.now() + r.delay; if (r !== st) rvlObs.unobserve(r.el); }
+      }
     }
   }, { rootMargin: '0px 0px -12% 0px', threshold: 0.01 }) : null;
 
-  function addReveal(el, cover, dur, delay) {
+  function addReveal(el, cover, dur, delay, group) {
     if (!el) return;
-    const st = { el, cover, dur: dur || REVEAL_MS, delay: delay || 0, t0: -1, p: -1 };
+    const st = { el, cover, dur: dur || REVEAL_MS, delay: delay || 0, t0: -1, p: -1, group: group || '' };
     RVL.push(st);
     if (REDUCED || !rvlObs) { st.t0 = 0; return; }
     rvlObs.observe(el);
@@ -1699,7 +1703,7 @@
   cItems.forEach((it, bi) => {
     addWords([...it.querySelectorAll('.crisis-item__num .cw, .crisis-item__title .cw')], BOX_S[bi], 0.03, 320 + bi * 40);
   });
-  cMedias.forEach((m, i) => addReveal(m, COVER_BLACK, 0, i * 120));
+  cMedias.forEach((m) => addReveal(m, COVER_BLACK, 0, 0, 'crisis')); // the three form as one (client rev)
 
   function sweepWord(m, p, rise, lag, fill, travel) {
     const tr = easeOut(seg(p, m.rs, m.rs + rise));
@@ -1844,41 +1848,31 @@
   const TEAM_T = [0.02, 0.34, 0.66, 0.98];
   if (TEAM) TEAM.lis.forEach((li, i) => li.addEventListener('click', () => {
     const pinH = teamPin.offsetHeight;
-    const Ts = (window.innerHeight - pinH) / 2;
+    const Ts = teamStickyTop();
     const y = teamSec.offsetTop - Ts + TEAM_T[i] * (teamSec.offsetHeight - pinH);
     window.scrollTo({ top: y, behavior: 'smooth' });
   }));
 
   function teamT() {
     if (!teamPin) return 0;
-    const vh = window.innerHeight;
     const pinH = teamPin.offsetHeight;
-    const Ts = (vh - pinH) / 2; // mirrors the sticky top in styles.css
     const top = teamSec.getBoundingClientRect().top;
-    return clamp01((Ts - top) / Math.max(1, teamSec.offsetHeight - pinH));
+    return clamp01((teamStickyTop() - top) / Math.max(1, teamSec.offsetHeight - pinH));
   }
 
-  // the heading clears the screen BEFORE the pin locks: the band is centred
-  // in the viewport, so on short screens it starts above the fold and the
-  // heading ran straight into the fixed nav logo (client rev)
-  function teamHeadExit() {
+  // sticky top of the band — mirrors the CSS: centred in the viewport, but
+  // never so high that the heading (150u down) slides under the fixed nav
+  function teamStickyTop() {
     if (!teamPin) return 0;
-    const vh = window.innerHeight;
-    const lockTop = (vh - teamPin.offsetHeight) / 2; // mirrors the sticky top
-    const lead = vh * 0.45;                          // run-up before the lock
-    return clamp01((lockTop + lead - teamSec.getBoundingClientRect().top) / lead);
+    const k = u();
+    return Math.max(64 - 150 * k, (window.innerHeight - teamPin.offsetHeight) / 2);
   }
 
   const washW = [0, 0, 0, 0]; // photo wash/reveal weights — time-paced, not scrubbed
   function updateTeamCarousel(T, dt) {
     if (!TEAM) return;
     const k = u();
-    if (TEAM.head) {
-      // it just scrolls away with the section and fades — the extra ride up
-      // read as a separate moving object (client rev)
-      const x = teamHeadExit();
-      TEAM.head.style.opacity = (1 - easeInOut(seg(x, 0.50, 1))).toFixed(3);
-    }
+
     let act = 0;
     for (const w of TW_WIN) act += easeInOut(seg(T, w[0], w[1]));
     const n = teamPhotos.length;
@@ -1925,7 +1919,10 @@
     // the names ride along: the active one stays on the portrait's centre line
     if (TEAM.list) {
       const nc = TEAM.lis.map((li) => li.offsetTop + li.offsetHeight / 2);
-      TEAM.list.style.transform = 'translateY(' + (-lerp(nc[i0], nc[i1], act - i0)).toFixed(2) + 'px)';
+      // …but never far enough to climb into the heading (client rev)
+      const headBot = TEAM.head ? TEAM.head.offsetTop + TEAM.head.offsetHeight : 0;
+      const up = Math.min(lerp(nc[i0], nc[i1], act - i0), Math.max(0, TEAM.list.offsetTop - headBot - 32 * k));
+      TEAM.list.style.transform = 'translateY(' + (-up).toFixed(2) + 'px)';
     }
   }
 

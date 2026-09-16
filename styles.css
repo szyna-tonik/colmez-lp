@@ -855,7 +855,9 @@ a { color: inherit; text-decoration: none; }
 /* the 1216u band pins centred in the viewport while the carousel scrubs */
 .team__pin {
   position: sticky;
-  top: calc((100vh - var(--team-h)) / 2);
+  /* centred in the viewport, but never so high that the heading (150u down)
+     slides under the fixed nav — mirrored by teamStickyTop() in main.js */
+  top: max(calc(64px - 150 * var(--u)), calc((100vh - var(--team-h)) / 2));
   height: var(--team-h);
   background: #ebebeb;
   color: var(--c-black);
@@ -1089,3 +1091,79 @@ a { color: inherit; text-decoration: none; }
 .footer__backed img { width: calc(141.667 * var(--u)); height: calc(20 * var(--u)); display: block; }
 a.footer__link { transition: opacity 0.2s ease; }
 a.footer__link:hover { opacity: 0.6; }
+
+/* ---------- CTA hover (global: hero, compact nav and footer) ----------
+   The label re-runs the page's own gold sweep, the arrow flies out of the
+   button to the right while a fresh one drops into its place, and the
+   footer bar's dark gold rises over the whole slab from the bottom. */
+@property --cfill {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 124%;
+}
+@keyframes ctaWash {
+  from { --cfill: -24%; }
+  to   { --cfill: 124%; }
+}
+.cta, .footer__cta { isolation: isolate; }
+.cta::before,
+.footer__cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--c-gold-700);
+  transform: translateY(101%);
+  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1);
+}
+.cta:hover::before,
+.footer__cta:hover::before { transform: translateY(0); }
+.cta > span, .footer__cta > span { position: relative; z-index: 1; }
+.cta__fx { z-index: 1; } /* stays absolute — only lifted above the hover plate */
+
+.cta__label {
+  --cfill: 124%;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(90deg,
+    var(--c-white) 0%,
+    var(--c-white) var(--cfill),
+    var(--c-gold-500) calc(var(--cfill) + 12%),
+    rgba(255, 255, 255, 0.22) calc(var(--cfill) + 30%),
+    rgba(255, 255, 255, 0.22) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-repeat: no-repeat;
+}
+.cta:hover .cta__label,
+.footer__cta:hover .cta__label { animation: ctaWash 0.55s cubic-bezier(0.33, 0, 0.2, 1) forwards; }
+
+/* the arrow leaves the button; its replacement drops in from the left */
+.cta__arrow {
+  position: relative;
+  display: inline-block;
+  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1);
+}
+.cta__arrow::after { /* the replacement waits off to the left, invisible */
+  content: "→";
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  transform: translateX(-240%);
+  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1), opacity 0s 0.42s;
+}
+.cta:hover .cta__arrow,
+.footer__cta:hover .cta__arrow { transform: translateX(300%); }
+.cta:hover .cta__arrow::after,
+.footer__cta:hover .cta__arrow::after {
+  opacity: 1;
+  transform: translateX(0);
+  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1), opacity 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta::before, .footer__cta::before,
+  .cta__arrow, .cta__arrow::after { transition: none; }
+  .cta:hover .cta__label, .footer__cta:hover .cta__label { animation: none; }
+}
