@@ -314,6 +314,39 @@
 
 </main>
 
+<!-- FOOTER (Figma 9298:457) — an UNDERFOOTER: it is sticky at the viewport
+     bottom for the whole page, hidden behind the opaque sections, and the
+     team band slides up off it at the end. Background = the hero's own
+     vector pattern at full colour (interactive stir included); the logo
+     forms like the preloader's, copy / CTA / links use the hero grammar. -->
+<footer class="footer" id="footer">
+  <canvas class="footer__pattern" id="footerPattern" aria-hidden="true"></canvas>
+  <div class="footer__content">
+    <div class="footer__logo">
+      <img id="footerLogoImg" src="assets/img/logo.svg" alt="Colmez">
+      <canvas class="footer__logofx" id="footerLogoFx" aria-hidden="true"></canvas>
+    </div>
+
+    <div class="footer__row">
+      <p class="footer__claim"><span class="cw">Powering</span> <span class="cw">next-generation</span><br><span class="cw">hazardous</span> <span class="cw">waste</span> <span class="cw">teams.</span></p>
+      <a class="footer__cta" id="footerCta" href="#"><span>Book a meeting</span><span aria-hidden="true">&rarr;</span></a>
+    </div>
+
+    <div class="footer__bar">
+      <span class="footer__plate" id="footerPlate" aria-hidden="true"></span>
+      <a class="footer__link cw" href="#">LinkedIn</a>
+      <a class="footer__link cw" href="#">Terms and conditions</a>
+      <a class="footer__link cw" href="#">Privacy Policy</a>
+      <span class="footer__link cw">&copy; 2026 Colmez</span>
+      <span class="footer__link cw">Made by tonik</span>
+      <span class="footer__backed">
+        <span class="footer__link cw">Backed by</span>
+        <img class="fr" src="assets/img/logo-a16z-speedrun.svg" alt="a16z Speedrun" width="142" height="20">
+      </span>
+    </div>
+  </div>
+</footer>
+
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson@3/dist/topojson.min.js"></script>
 <script src="main.js"></script>

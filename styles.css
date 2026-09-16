@@ -19,6 +19,7 @@
   --c-grey-200: #737373;
   --c-grey-800: #313131;
   --c-gold-500: #ae9a29;
+  --c-gold-700: #38360d;
 
   --u: calc(100vw / 1496);
   --gutter: calc(40 * var(--u));
@@ -420,7 +421,7 @@ a { color: inherit; text-decoration: none; }
 
 /* crisis words: same sweep mechanics as .waste .w — per-word gradient,
    --wbase is the colour the sweep leaves behind (white / gold for numbers) */
-.crisis .cw, .map .cw, .quote .cw, .screens .cw, .security .cw {
+.crisis .cw, .map .cw, .quote .cw, .screens .cw, .security .cw, .footer .cw {
   display: inline-block;
   opacity: 0;
   padding: 0.14em 0 0.24em;
@@ -450,7 +451,7 @@ a { color: inherit; text-decoration: none; }
 .team .cw { --wbase: var(--c-black); --wtail: #ebebeb; }
 .screen-item__chip .cw { --wbase: var(--c-white); --wtail: var(--c-gold-500); }
 /* fade-rise lines (subs, list rows, roles) — driven like the words, no fill */
-.quote .fr, .screens .fr, .security .fr, .team .fr { opacity: 0; will-change: transform, opacity; }
+.quote .fr, .screens .fr, .security .fr, .team .fr, .footer .fr { opacity: 0; will-change: transform, opacity; }
 /* body blocks (client rev): long copy reveals as ONE block, not word by
    word — the per-word cascade made big paragraphs feel over-busy */
 .blk { opacity: 0; will-change: transform, opacity; }
@@ -845,6 +846,7 @@ a { color: inherit; text-decoration: none; }
 /* ---------- TEAM (Figma 9286:278) ---------- */
 .team {
   position: relative;
+  background: var(--c-black); /* opaque: the underfooter sits behind it */
   height: calc(1216 * var(--u) + var(--team-track));
 }
 /* the 1216u band pins centred in the viewport while the carousel scrubs */
@@ -955,3 +957,132 @@ a { color: inherit; text-decoration: none; }
 }
 .team__photo img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .team__photo:first-child { width: calc(380 * var(--u)); height: calc(458 * var(--u)); }
+
+/* ---------- FOOTER (Figma 9298:457) ---------- */
+/* Underfooter: sticky at the viewport bottom for the whole page, painted
+   behind every section (they all carry z-index 1), so the team band slides
+   up off it at the end of the page instead of pushing it down. */
+.lp > section,
+.lp > .stage { position: relative; z-index: 1; }
+.security { position: relative; z-index: 1; }
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 0;
+  height: calc(792 * var(--u));
+  background: var(--c-black);
+  overflow: hidden;
+}
+.footer__pattern {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* the black plate the whole footer sits on (Figma: 1416x450, nudged 21u up) */
+.footer__content {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% - 21 * var(--u)));
+  width: calc(1416 * var(--u));
+  height: calc(450 * var(--u));
+  background: var(--c-black);
+  overflow: hidden;
+}
+.footer__logo {
+  position: absolute;
+  left: calc(24 * var(--u));
+  top: calc(24 * var(--u));
+  width: calc(1368 * var(--u));
+}
+.footer__logo img { display: block; width: 100%; height: auto; opacity: 0; } /* the goo canvas hands it over */
+/* the goo canvas the wordmark forms out of (preloader grammar) */
+.footer__logofx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.footer__row {
+  position: absolute;
+  left: calc(24 * var(--u));
+  top: calc(234 * var(--u));
+  width: calc(1368 * var(--u));
+  height: calc(100 * var(--u));
+}
+.footer__claim {
+  margin: 0;
+  width: calc(622 * var(--u));
+  font-size: calc(56 * var(--u));
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--c-white);
+  position: absolute;
+  left: 0;
+  bottom: 0;
+}
+.footer .cw { --wbase: var(--c-white); --wtail: var(--c-black); }
+.footer__bar .cw { --wtail: var(--c-gold-700); }
+/* CTA: absolute so it can draw its 2px line and grow up like the hero's */
+.footer__cta {
+  position: absolute;
+  left: calc(1029 * var(--u)); /* left-anchored: the line draws L->R like the hero's */
+  bottom: 0;
+  width: calc(339 * var(--u));
+  height: calc(100 * var(--u));
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 calc(12 * var(--u)) calc(8 * var(--u));
+  background: var(--c-gold-500);
+  color: var(--c-white);
+  font-size: calc(16 * var(--u));
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.footer__bar {
+  position: absolute;
+  left: 0;
+  top: calc(382 * var(--u));
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(24 * var(--u));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* the plate behind the links draws in like the CTA (JS drives w then h) */
+.footer__plate {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--c-gold-700);
+  z-index: 0;
+}
+.footer__link,
+.footer__backed {
+  position: relative;
+  z-index: 1;
+  font-size: calc(14 * var(--u));
+  line-height: 1;
+  font-weight: 400;
+  color: var(--c-white);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.footer__backed { display: flex; align-items: center; gap: calc(18 * var(--u)); }
+.footer__backed img { width: calc(141.667 * var(--u)); height: calc(20 * var(--u)); display: block; }
+a.footer__link { transition: opacity 0.2s ease; }
+a.footer__link:hover { opacity: 0.6; }

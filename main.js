@@ -427,23 +427,34 @@
     patOy = (h - DESIGN_H * patScale) / 2;
   }
 
-  let lastPatKey = '', patLive = false;
+  let lastPatKey = '', patLive = false, bakeTok = -1;
+  // the stir bake is global (design space) — once per frame, whichever
+  // canvas asks for it first
+  function bakeStirOnce(now) { if (bakeTok === now) return; bakeTok = now; bakeStir(now); }
+
   function renderPattern(pd, now, dim) {
     if (!patReady) return;
-    const t = now / 1000;
+    // off-screen the hero pattern is pure cost — the footer runs its own pass
+    const pr = patCanvas.getBoundingClientRect();
+    if (pr.bottom < -50 || pr.top > window.innerHeight + 50) return;
     const live = !REDUCED && pd > 0;
     patLive = live;
     const key = live ? '' : `${pd.toFixed(4)}|${dim.toFixed(3)}`;
     if (key && key === lastPatKey) return;
     lastPatKey = key;
+    paintPattern(pctx, patCanvas.width, patCanvas.height, patScale, patOx, patOy, pd, now, dim, live);
+  }
 
-    const ctx = pctx;
+  // one vector pass over any target canvas — the hero stage and the footer
+  // share the pattern, the stir field and the bake
+  function paintPattern(ctx, cw, ch, sc, ox, oy, pd, now, dim, live) {
+    const t = now / 1000;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = BG_CSS;
-    ctx.fillRect(0, 0, patCanvas.width, patCanvas.height);
+    ctx.fillRect(0, 0, cw, ch);
     if (pd <= 0) return;
 
-    ctx.setTransform(patScale, 0, 0, patScale, patOx, patOy);
+    ctx.setTransform(sc, 0, 0, sc, ox, oy);
     const gold = goldAt(dim); // dim = darker gold, not opacity
     ctx.fillStyle = gold;
     ctx.strokeStyle = gold;
@@ -451,7 +462,7 @@
     ctx.lineJoin = 'round';
 
     const amp = live ? 1 : 0;
-    if (live) bakeStir(now);
+    if (live) bakeStirOnce(now);
 
     // noise dots — tiny bubbles: slow pulse, rare pops, riding the stir field
     let di = 0;
@@ -516,6 +527,17 @@
 
   function onPointerMove(e) {
     if (REDUCED) return;
+    if (fpCanvas && footerExposure() > 0.01) { // the footer owns the stir once it is out
+      const fr = fpCanvas.getBoundingClientRect();
+      const above = footerEl.previousElementSibling;
+      const cover = above ? above.getBoundingClientRect().bottom : -1e9;
+      if (e.clientY > cover && e.clientY >= fr.top && e.clientY <= fr.bottom && fpScale > 0) {
+        ptX = ((e.clientX - fr.left) * patDpr - fpOx) / fpScale;
+        ptY = ((e.clientY - fr.top) * patDpr - fpOy) / fpScale;
+        if (fwX < -1e5) { fwX = ptX; fwY = ptY; }
+        return;
+      }
+    }
     const r = patCanvas.getBoundingClientRect();
     if (r.height === 0) return;
     const cx = (e.clientX - r.left) * patDpr, cy = (e.clientY - r.top) * patDpr;
@@ -1044,6 +1066,12 @@
         mgl.texImage2D(mgl.TEXTURE_2D, 0, mgl.RGBA, mgl.RGBA, mgl.UNSIGNED_BYTE, c2);
         miniMaskReady = true;
       }
+      if (fgl && footMaskTex && !footMaskReady) {
+        fgl.activeTexture(fgl.TEXTURE1);
+        fgl.bindTexture(fgl.TEXTURE_2D, footMaskTex);
+        fgl.texImage2D(fgl.TEXTURE_2D, 0, fgl.RGBA, fgl.RGBA, fgl.UNSIGNED_BYTE, c2);
+        footMaskReady = true;
+      }
     };
     img.src = 'assets/img/logo.svg';
   }
@@ -1099,6 +1127,114 @@
     lgl.clearColor(0, 0, 0, 0);
     lgl.clear(lgl.COLOR_BUFFER_BIT);
     lgl.drawArrays(lgl.TRIANGLES, 0, 6);
+  }
+
+  // ---------- footer (underfooter) ----------
+  // Same three animations as the rest of the page, re-pointed at the footer:
+  // the wordmark forms out of goo like the preloader's, the claim + CTA run
+  // the hero's line-draw grammar, and the background is the hero's own
+  // vector pattern at FULL colour (dim = 1, i.e. before the stage darkens).
+  const footerEl = $('footer');
+  const fpCanvas = $('footerPattern');
+  const fpctx = fpCanvas ? fpCanvas.getContext('2d', { alpha: false }) : null;
+  let fpScale = 1, fpOx = 0, fpOy = 0;
+  let fgl = null, pFoot = null, footMaskTex = null, footMaskReady = false;
+
+  function resizeFooterPattern() {
+    if (!fpCanvas) return;
+    const w = Math.round(fpCanvas.clientWidth * patDpr), h = Math.round(fpCanvas.clientHeight * patDpr);
+    if (!w || !h) return;
+    if (fpCanvas.width !== w || fpCanvas.height !== h) { fpCanvas.width = w; fpCanvas.height = h; }
+    fpScale = Math.max(w / DESIGN_W, h / DESIGN_H);
+    fpOx = (w - DESIGN_W * fpScale) / 2;
+    fpOy = (h - DESIGN_H * fpScale) / 2;
+  }
+
+  // how much of the footer the page has uncovered (0 = fully behind the last
+  // section, 1 = the whole band is out)
+  function footerExposure() {
+    if (!footerEl) return 0;
+    const above = footerEl.previousElementSibling;
+    const b = above ? above.getBoundingClientRect().bottom : 0;
+    return clamp01((window.innerHeight - b) / Math.max(1, footerEl.offsetHeight));
+  }
+
+  function initFooterLogoGL() {
+    const cv = $('footerLogoFx');
+    if (!cv) return false;
+    fgl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+    if (!fgl) return false;
+    const sh = (type, src) => {
+      const x = fgl.createShader(type);
+      fgl.shaderSource(x, src); fgl.compileShader(x);
+      if (!fgl.getShaderParameter(x, fgl.COMPILE_STATUS)) { console.error(fgl.getShaderInfoLog(x)); return null; }
+      return x;
+    };
+    const vs = sh(fgl.VERTEX_SHADER, VERT), fs = sh(fgl.FRAGMENT_SHADER, FRAG_LOGO_IN);
+    if (!vs || !fs) return false;
+    const prog = fgl.createProgram();
+    fgl.attachShader(prog, vs); fgl.attachShader(prog, fs);
+    fgl.bindAttribLocation(prog, 0, 'aPos');
+    fgl.linkProgram(prog);
+    if (!fgl.getProgramParameter(prog, fgl.LINK_STATUS)) { console.error(fgl.getProgramInfoLog(prog)); return false; }
+    const uni = {};
+    const n = fgl.getProgramParameter(prog, fgl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = fgl.getActiveUniform(prog, i);
+      uni[info.name.replace('[0]', '')] = fgl.getUniformLocation(prog, info.name);
+    }
+    pFoot = { prog, uni, cv };
+    const buf = fgl.createBuffer();
+    fgl.bindBuffer(fgl.ARRAY_BUFFER, buf);
+    fgl.bufferData(fgl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), fgl.STATIC_DRAW);
+    fgl.enableVertexAttribArray(0);
+    fgl.vertexAttribPointer(0, 2, fgl.FLOAT, false, 0, 0);
+    fgl.useProgram(prog);
+    fgl.uniform1i(uni.uMask, 1);
+    fgl.uniform3fv(uni.uGold, GOLD);
+    footMaskTex = fgl.createTexture();
+    fgl.activeTexture(fgl.TEXTURE1);
+    fgl.bindTexture(fgl.TEXTURE_2D, footMaskTex);
+    fgl.texParameteri(fgl.TEXTURE_2D, fgl.TEXTURE_WRAP_S, fgl.CLAMP_TO_EDGE);
+    fgl.texParameteri(fgl.TEXTURE_2D, fgl.TEXTURE_WRAP_T, fgl.CLAMP_TO_EDGE);
+    fgl.texParameteri(fgl.TEXTURE_2D, fgl.TEXTURE_MIN_FILTER, fgl.LINEAR);
+    fgl.texParameteri(fgl.TEXTURE_2D, fgl.TEXTURE_MAG_FILTER, fgl.LINEAR);
+    if (logoMaskCanvas) { fgl.texImage2D(fgl.TEXTURE_2D, 0, fgl.RGBA, fgl.RGBA, fgl.UNSIGNED_BYTE, logoMaskCanvas); footMaskReady = true; }
+    return true;
+  }
+
+  function resizeFooterLogo() {
+    if (!fgl || !pFoot) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const w = Math.round(pFoot.cv.clientWidth * dpr), h = Math.round(pFoot.cv.clientHeight * dpr);
+    if (!w || !h) return;
+    if (pFoot.cv.width !== w || pFoot.cv.height !== h) { pFoot.cv.width = w; pFoot.cv.height = h; }
+    fgl.viewport(0, 0, w, h);
+    fgl.useProgram(pFoot.prog);
+    fgl.uniform2f(pFoot.uni.uRes, w, h);
+  }
+
+  const footLogoImg = $('footerLogoImg');
+  function renderFooterLogoIn(p) {
+    p = clamp01(p);
+    if (REDUCED || !fgl || !pFoot || !footMaskReady) { // fallback: plain fade
+      if (footLogoImg) footLogoImg.style.opacity = easeInOut(p).toFixed(3);
+      return;
+    }
+    if (p >= 1) { // hand over to the crisp <img>
+      if (footLogoImg) footLogoImg.style.opacity = '1';
+      fgl.clearColor(0, 0, 0, 0);
+      fgl.clear(fgl.COLOR_BUFFER_BIT);
+      return;
+    }
+    if (footLogoImg) footLogoImg.style.opacity = '0';
+    fgl.useProgram(pFoot.prog);
+    fgl.activeTexture(fgl.TEXTURE1);
+    fgl.bindTexture(fgl.TEXTURE_2D, footMaskTex);
+    fgl.uniform1f(pFoot.uni.uP, easeInOut(p));
+    fgl.clearColor(0, 0, 0, 0);
+    fgl.clear(fgl.COLOR_BUFFER_BIT);
+    fgl.drawArrays(fgl.TRIANGLES, 0, 6);
   }
 
   // ---------- nav hand-over goo (logo + CTA) ----------
@@ -1832,6 +1968,80 @@
     for (const m of teamFr) fadeRise(m, teS, travel);
   }
 
+  // ---------- footer choreography ----------
+  // One time-driven run, started the moment the underfooter is a third out:
+  //   0.00-1.40  wordmark forms out of goo (the preloader's reveal)
+  //   1.05       claim words sweep in (hero grammar)
+  //   1.35/1.95  CTA draws its 2px line, then grows up; label last
+  //   1.90/2.50  link plate draws and grows the same way; links sweep on top
+  const fClaimWords = footerEl
+    ? [...footerEl.querySelectorAll('.footer__claim .cw')].map((el, i, a) =>
+        ({ el, rs: 1.05 + (i / a.length) * 0.45 + hash01(i + 980) * 0.06 }))
+    : [];
+  const fBarWords = footerEl
+    ? [...footerEl.querySelectorAll('.footer__bar .cw')].map((el, i, a) =>
+        ({ el, rs: 2.55 + (i / a.length) * 0.35 + hash01(i + 1010) * 0.05 }))
+    : [];
+  const fBarFr = footerEl ? [...footerEl.querySelectorAll('.footer__bar .fr')].map((el, i) => ({ el, rs: 2.95 + i * 0.05 })) : [];
+  const fCta = $('footerCta');
+  const fPlate = $('footerPlate');
+  const fBar = footerEl ? footerEl.querySelector('.footer__bar') : null;
+  const FT = { t0: 0, done: false };
+  const FT_END = 3.5;
+  const FT_CTA = 1.35, FT_PLATE = 1.90;
+
+  function footerFrame(t) {
+    const k = u(), travel = 38 * k;
+    renderFooterLogoIn(seg(t, 0, 1.40));
+    for (const m of fClaimWords) sweepWord(m, t, 0.35, 0.12, 0.45, travel);
+    for (const m of fBarWords) sweepWord(m, t, 0.35, 0.12, 0.45, travel);
+    for (const m of fBarFr) fadeRise(m, t, travel);
+    if (fCta) { // 2px line draws across, then the block grows up from it
+      const lw = easeOut(seg(t, FT_CTA, FT_CTA + 0.60));
+      const lh = easeOut(seg(t, FT_CTA + 0.60, FT_CTA + 1.30));
+      const h = Math.max(2, 100 * k * lh);
+      fCta.style.width = (339 * k * lw).toFixed(2) + 'px';
+      fCta.style.height = h.toFixed(2) + 'px';
+      fCta.style.padding = `0 ${(12 * k * lh).toFixed(2)}px ${(8 * k * lh).toFixed(2)}px`;
+      fCta.style.opacity = lw > 0 ? '1' : '0';
+      const ct = seg(t, FT_CTA + 1.20, FT_CTA + 1.50);
+      for (const sp of fCta.children) sp.style.opacity = ct.toFixed(3);
+    }
+    if (fPlate && fBar) { // the links' plate arrives the same way as the button
+      const pw = easeOut(seg(t, FT_PLATE, FT_PLATE + 0.60));
+      const ph = easeOut(seg(t, FT_PLATE + 0.60, FT_PLATE + 1.30));
+      fPlate.style.width = (pw * 100).toFixed(2) + '%';
+      fPlate.style.height = Math.max(2, fBar.offsetHeight * ph).toFixed(2) + 'px';
+    }
+  }
+
+  function footerRest() {
+    renderFooterLogoIn(1);
+    for (const m of [...fClaimWords, ...fBarWords]) sweepWord(m, 99, 0.35, 0.12, 0.45, 0);
+    for (const m of fBarFr) fadeRise(m, 99, 0);
+    if (fCta) { fCta.style.cssText = ''; for (const sp of fCta.children) sp.style.opacity = '1'; }
+    if (fPlate) { fPlate.style.width = '100%'; fPlate.style.height = '100%'; }
+  }
+
+  function updateFooter(ts) {
+    if (!footerEl) return;
+    const ex = footerExposure();
+    if (ex <= 0.002 && !FT.t0) return;
+    if (patReady) { // the hero's pattern, full colour, stir and all
+      if (!fpCanvas.width) resizeFooterPattern();
+      paintPattern(fpctx, fpCanvas.width, fpCanvas.height, fpScale, fpOx, fpOy, 1, ts, 1, !REDUCED);
+    }
+    if (FT.done) return;
+    if (!FT.t0) {
+      if (ex < 0.33) return;
+      if (REDUCED) { footerRest(); FT.done = true; return; }
+      FT.t0 = ts;
+    }
+    const t = (ts - FT.t0) / 1000;
+    footerFrame(t);
+    if (t >= FT_END) { footerRest(); FT.done = true; }
+  }
+
   // the map ride itself is scroll-driven (reversible), anchored to the band
   function mapAnimProgress() {
     if (!mapStage) return 0;
@@ -2098,6 +2308,7 @@
     updateMap(Ms);
     updateQuoteScreens(dt, wheelDriving);
     updateReveals(ts);
+    updateFooter(ts);
     if (window.colmezMap) window.colmezMap.set(As);
     requestAnimationFrame(loop);
   }
@@ -2119,6 +2330,8 @@
       resizeLogoFx();
       resizeCtaFx();
       resizeMiniFx();
+      resizeFooterPattern();
+      resizeFooterLogo();
       layoutWords();
       lastTextP = -1; lastHeroP = -1; lastNavT = -1; lastPatKey = ''; lastCrisisKey = ''; lastQSKey = '';
       dirty = true;
@@ -2129,6 +2342,7 @@
   initLogoGL();
   initCtaGL();
   initMiniLogoGL();
+  initFooterLogoGL();
   initPreloader();
   loadPattern();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutWords(); dirty = true; });
