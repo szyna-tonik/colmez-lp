@@ -451,6 +451,9 @@ a { color: inherit; text-decoration: none; }
 .screen-item__chip .cw { --wbase: var(--c-white); --wtail: var(--c-gold-500); }
 /* fade-rise lines (subs, list rows, roles) — driven like the words, no fill */
 .quote .fr, .screens .fr, .security .fr, .team .fr { opacity: 0; will-change: transform, opacity; }
+/* body blocks (client rev): long copy reveals as ONE block, not word by
+   word — the per-word cascade made big paragraphs feel over-busy */
+.blk { opacity: 0; will-change: transform, opacity; }
 
 /* ---------- MAP (Figma 9249:1707 + colmez-hero-map-brief.md) ---------- */
 

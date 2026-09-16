@@ -1495,6 +1495,50 @@
   const COVER_WHITE = { css: '#ffffff', vec: [1, 1, 1] };
   const COVER_EB = { css: '#ebebeb', vec: [0xeb / 255, 0xeb / 255, 0xeb / 255] };
 
+  // ---------- asset reveals (client rev) ----------
+  // Photos and product shots used to ride their section's scroll progress,
+  // which on a fast scroll played the whole goo reveal in a blink. Each media
+  // now starts a TIME-driven reveal the first time it enters the viewport.
+  const REVEAL_MS = 1800; // one calm goo reveal, start to finish
+  const RVL = [];
+  const rvlObs = ('IntersectionObserver' in window) ? new IntersectionObserver((ents) => {
+    for (const e of ents) {
+      if (!e.isIntersecting) continue;
+      const st = RVL.find((r) => r.el === e.target);
+      if (st && st.t0 < 0) st.t0 = performance.now() + st.delay;
+      rvlObs.unobserve(e.target);
+    }
+  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.01 }) : null;
+
+  function addReveal(el, cover, dur, delay) {
+    if (!el) return;
+    const st = { el, cover, dur: dur || REVEAL_MS, delay: delay || 0, t0: -1, p: -1 };
+    RVL.push(st);
+    if (REDUCED || !rvlObs) { st.t0 = 0; return; }
+    rvlObs.observe(el);
+  }
+
+  function updateReveals(ts) {
+    for (const r of RVL) {
+      if (r.p >= 1) continue;
+      const p = r.t0 < 0 ? 0 : (REDUCED ? 1 : clamp01((ts - r.t0) / r.dur));
+      if (p === r.p) continue;
+      r.p = p;
+      imgGooSet(r.el, p, r.cover.css, r.cover.vec);
+    }
+  }
+
+  // whole-paragraph reveal — long copy comes in as ONE block (client rev:
+  // word-by-word on a big paragraph made too much happen at once)
+  const BLK_IN = 0.16;
+  function revealBlock(el, p, rs, travel, mul) {
+    if (!el) return;
+    const tr = easeOut(seg(p, rs, rs + BLK_IN));
+    const st = el.style;
+    st.opacity = (tr * (mul === undefined ? 1 : mul)).toFixed(3);
+    st.transform = tr >= 1 ? '' : `translate3d(0, ${((1 - tr) * travel).toFixed(1)}px, 0)`;
+  }
+
   // ---------- crisis section (pinned accordion) ----------
   // E: entry — section top rides viewport-bottom → pin engage; every word
   //    except subheads 002/003 sweeps in waste-style.
@@ -1508,14 +1552,10 @@
   const cMedias = cItems.map((it) => it.querySelector('.crisis-item__media'));
 
   const CE_RISE = 0.08, CE_LAG = 0.02, CE_FILL = 0.10; // entry windows, in E
-  const CA_RISE = 0.05, CA_LAG = 0.02, CA_FILL = 0.07; // activation windows, in C
 
   // entry cascade (in E): the section headline first, around mid-viewport;
   // then each box in order — box heading (number + title), photo, subhead
   const BOX_S = [0.58, 0.68, 0.78];
-  // photo reveal windows — stretched (client: fast scroll made the goo pop;
-  // capped at E=1 so the last box still completes before the pin engages)
-  const IM_W = BOX_S.map((s) => [s + 0.02, Math.min(1, s + 0.34)]);
   const cEntry = [];
   const addWords = (els, start, spread, seed) => els.forEach((el, i) =>
     cEntry.push({ el, rs: start + (i / els.length) * spread + hash01(i + seed) * 0.012 }));
@@ -1523,12 +1563,7 @@
   cItems.forEach((it, bi) => {
     addWords([...it.querySelectorAll('.crisis-item__num .cw, .crisis-item__title .cw')], BOX_S[bi], 0.03, 320 + bi * 40);
   });
-  addWords([...cDescs[0].querySelectorAll('.cw')], BOX_S[0] + 0.10, 0.10, 360);
-
-  const actWords = (desc, start, h0) => [...desc.querySelectorAll('.cw')]
-    .map((el, i, a) => ({ el, rs: start + (i / a.length) * 0.13 + hash01(i + h0) * 0.015 }));
-  const cAct1 = actWords(cDescs[1], 0.18, 400);
-  const cAct2 = actWords(cDescs[2], 0.68, 450);
+  cMedias.forEach((m, i) => addReveal(m, COVER_BLACK, 0, i * 120));
 
   function sweepWord(m, p, rise, lag, fill, travel) {
     const tr = easeOut(seg(p, m.rs, m.rs + rise));
@@ -1546,12 +1581,11 @@
     const travel = 38 * u();
 
     for (const m of cEntry) sweepWord(m, E, CE_RISE, CE_LAG, CE_FILL, travel);
-    for (const m of cAct1) sweepWord(m, C, CA_RISE, CA_LAG, CA_FILL, travel);
-    for (const m of cAct2) sweepWord(m, C, CA_RISE, CA_LAG, CA_FILL, travel);
 
-    // photos form out of goo (preloader-logo reveal, black cover)
-    for (let i = 0; i < 3; i++)
-      imgGooSet(cMedias[i], seg(E, IM_W[i][0], IM_W[i][1]), COVER_BLACK.css, COVER_BLACK.vec);
+    // body copy reveals whole; 001 also fades out as the accordion hands over
+    revealBlock(cDescs[0], E, BOX_S[0] + 0.10, travel, 1 - seg(C, 0.06, 0.22));
+    revealBlock(cDescs[1], C, 0.18, travel, 1 - seg(C, 0.56, 0.72));
+    revealBlock(cDescs[2], C, 0.68, travel);
 
     const a = easeInOut(seg(C, 0.06, 0.44)); // 001 → 002
     const b = easeInOut(seg(C, 0.56, 0.94)); // 002 → 003
@@ -1561,8 +1595,6 @@
     cItems[0].style.setProperty('--chw', lerp(100, 26, a).toFixed(1));
     cItems[1].style.setProperty('--chw', lerp(lerp(26, 100, a), 26, b).toFixed(1));
     cItems[2].style.setProperty('--chw', lerp(26, 100, b).toFixed(1));
-    cDescs[0].style.opacity = (1 - seg(C, 0.06, 0.22)).toFixed(3);
-    cDescs[1].style.opacity = (1 - seg(C, 0.56, 0.72)).toFixed(3);
   }
 
   const CR = { E: 0, C: 0 };
@@ -1608,10 +1640,9 @@
 
   const quoteSec = $('quote');
   const quoteMedia = quoteSec ? quoteSec.querySelector('.quote__media') : null;
-  const qWords = quoteSec
-    ? [...wordsIn(quoteSec, '.quote__text .cw', 0.32, 0.14, 700),
-       ...wordsIn(quoteSec, '.quote__name .cw', 0.56, 0.03, 730)]
-    : [];
+  const quoteText = quoteSec ? quoteSec.querySelector('.quote__text') : null;
+  const qWords = quoteSec ? wordsIn(quoteSec, '.quote__name .cw', 0.56, 0.03, 730) : [];
+  addReveal(quoteMedia, COVER_GREY);
   const qFr = quoteSec
     ? [...quoteSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.60 + i * 0.04 }))
     : [];
@@ -1626,6 +1657,7 @@
         fr: [...it.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.40 + i * 0.045 })),
       }))
     : [];
+  sItems.forEach((s) => addReveal(s.media, COVER_WHITE));
 
   function fadeRise(m, p, travel) {
     const tr = easeOut(seg(p, m.rs, m.rs + 0.10));
@@ -1651,9 +1683,8 @@
        ...wordsIn(teamSec, '.team__list .is-active .team__name .cw', 0.46, 0.04, 970)]
     : [];
   const teamFr = teamSec ? [...teamSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.48 + i * 0.04 })) : [];
-  // strip photos top->bottom = the member order; the active portrait leads
-  const TP_W = [[0.28, 0.62], [0.44, 0.76], [0.55, 0.85], [0.62, 0.92]];
-  const teamPhotos = teamSec ? [...teamSec.querySelectorAll('.team__photo')].map((el, i) => ({ el, w: TP_W[i] || [0.3, 0.65] })) : [];
+  const teamPhotos = teamSec ? [...teamSec.querySelectorAll('.team__photo')].map((el) => ({ el })) : [];
+  teamPhotos.forEach((p, i) => addReveal(p.el, COVER_EB, 0, i * 140));
 
   // ---------- team member carousel (pinned) ----------
   // T = pinned progress over --team-track; three eased hand-over windows sum
@@ -1667,6 +1698,8 @@
     chips: [...teamSec.querySelectorAll('.team__list .team__chip')],
     bios: [...teamSec.querySelectorAll('.team__bio-item')],
     strip: teamSec.querySelector('.team__strip'),
+    list: teamSec.querySelector('.team__list'),
+    head: teamSec.querySelector('.team__head'),
     imgs: [...teamSec.querySelectorAll('.team__photo img')],
   } : null;
   const TW_WIN = [[0.06, 0.30], [0.38, 0.62], [0.70, 0.94]];
@@ -1690,12 +1723,34 @@
     return clamp01((Ts - top) / Math.max(1, teamSec.offsetHeight - pinH));
   }
 
-  function updateTeamCarousel(T) {
+  // the heading clears the screen BEFORE the pin locks: the band is centred
+  // in the viewport, so on short screens it starts above the fold and the
+  // heading ran straight into the fixed nav logo (client rev)
+  function teamHeadExit() {
+    if (!teamPin) return 0;
+    const vh = window.innerHeight;
+    const lockTop = (vh - teamPin.offsetHeight) / 2; // mirrors the sticky top
+    const lead = vh * 0.45;                          // run-up before the lock
+    return clamp01((lockTop + lead - teamSec.getBoundingClientRect().top) / lead);
+  }
+
+  const washW = [0, 0, 0, 0]; // photo wash/reveal weights — time-paced, not scrubbed
+  function updateTeamCarousel(T, dt) {
     if (!TEAM) return;
     const k = u();
+    if (TEAM.head) {
+      const x = teamHeadExit();
+      const hy = easeInOut(x) * (150 * k + TEAM.head.offsetHeight + 40 * k);
+      TEAM.head.style.transform = x <= 0 ? '' : `translate3d(0, ${(-hy).toFixed(1)}px, 0)`;
+      TEAM.head.style.opacity = (1 - seg(x, 0.60, 1)).toFixed(3);
+    }
     let act = 0;
     for (const w of TW_WIN) act += easeInOut(seg(T, w[0], w[1]));
     const n = teamPhotos.length;
+    // the active photo's reveal runs on its OWN clock: a fast scrub used to
+    // play the whole wash->original in a blink (client rev)
+    const ai = Math.max(0, Math.min(n - 1, Math.round(act)));
+    const kw = dt ? 1 - Math.exp(-dt * 1.8) : 1;
     const hs = [];
     for (let i = 0; i < n; i++) {
       const wgt = clamp01(1 - Math.abs(act - i));
@@ -1710,7 +1765,9 @@
         'rgb(' + Math.round(lerp(115, 174, wgt)) + ',' + Math.round(lerp(115, 154, wgt)) + ',' + Math.round(lerp(115, 41, wgt)) + ')';
       // inactive portraits sit under a washed-grey take of themselves; the
       // activation opens goo holes onto the original
-      if (TEAM.imgs[i]) imgGooTexSet(teamPhotos[i].el, TEAM.imgs[i], wgt);
+      washW[i] += ((i === ai ? 1 : 0) - washW[i]) * kw;
+      if (Math.abs(washW[i] - (i === ai ? 1 : 0)) < 0.002) washW[i] = i === ai ? 1 : 0;
+      if (TEAM.imgs[i]) imgGooTexSet(teamPhotos[i].el, TEAM.imgs[i], washW[i]);
       if (TEAM.bios[i]) {
         const op = seg(wgt, 0.5, 0.95);
         const bs = TEAM.bios[i].style;
@@ -1725,6 +1782,11 @@
     const i0 = Math.min(n - 1, Math.floor(act)), i1 = Math.min(n - 1, i0 + 1);
     const cAct = lerp(centers[i0], centers[i1], act - i0);
     TEAM.strip.style.transform = 'translate(-50%, ' + (599 * k - cAct).toFixed(2) + 'px)';
+    // the names ride along: the active one stays on the portrait's centre line
+    if (TEAM.list) {
+      const nc = TEAM.lis.map((li) => li.offsetTop + li.offsetHeight / 2);
+      TEAM.list.style.transform = 'translateY(' + (-lerp(nc[i0], nc[i1], act - i0)).toFixed(2) + 'px)';
+    }
   }
 
   let qS = null, shS = null, seS = null, teS = null, teTs = null;
@@ -1743,6 +1805,7 @@
     }
     if (securitySec) seS = sm(seS, sectionE(securitySec));
     if (teamSec) { teS = sm(teS, sectionE(teamSec)); teTs = sm(teTs, teamT()); }
+    updateTeamCarousel(teTs, dt); // own clock for the wash — runs past the key gate
     const key = [qS, shS, seS, teS, teTs, ...siS].map((v) => (v === null ? 'x' : v.toFixed(4))).join('|');
     if (key === lastQSKey) return;
     lastQSKey = key;
@@ -1750,22 +1813,18 @@
     if (quoteSec) {
       for (const m of qWords) sweepWord(m, qS, CE_RISE, CE_LAG, CE_FILL, travel);
       for (const m of qFr) fadeRise(m, qS, travel);
-      imgGooSet(quoteMedia, seg(qS, 0.20, 0.75), COVER_GREY.css, COVER_GREY.vec);
+      revealBlock(quoteText, qS, 0.30, travel);
     }
     for (const m of sHeadWords) sweepWord(m, shS, CE_RISE, CE_LAG, CE_FILL, travel);
     sItems.forEach((s, i) => {
       const E = siS[i];
       for (const m of s.words) sweepWord(m, E, CE_RISE, CE_LAG, CE_FILL, travel);
       for (const m of s.fr) fadeRise(m, E, travel);
-      imgGooSet(s.media, seg(E, 0.28, 0.80), COVER_WHITE.css, COVER_WHITE.vec);
     });
     for (const m of secWords) sweepWord(m, seS, CE_RISE, CE_LAG, CE_FILL, travel);
     for (const m of secFr) fadeRise(m, seS, travel);
     for (const m of teamWords) sweepWord(m, teS, CE_RISE, CE_LAG, CE_FILL, travel);
     for (const m of teamFr) fadeRise(m, teS, travel);
-    for (const p of teamPhotos)
-      imgGooSet(p.el, seg(teS, p.w[0], p.w[1]), COVER_EB.css, COVER_EB.vec);
-    updateTeamCarousel(teTs);
   }
 
   // the map ride itself is scroll-driven (reversible), anchored to the band
@@ -2033,6 +2092,7 @@
     updateCrisis(Es, Cs);
     updateMap(Ms);
     updateQuoteScreens(dt, wheelDriving);
+    updateReveals(ts);
     if (window.colmezMap) window.colmezMap.set(As);
     requestAnimationFrame(loop);
   }
