@@ -38,6 +38,9 @@
 
   /* scroll room for the pinned team carousel (three member hand-overs) */
   --team-track: 210vh;
+  /* band height: Figma's 1216u left ~388u of dead air under the last member,
+     halved on the client rev */
+  --team-h: calc(1022 * var(--u));
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -847,13 +850,13 @@ a { color: inherit; text-decoration: none; }
 .team {
   position: relative;
   background: var(--c-black); /* opaque: the underfooter sits behind it */
-  height: calc(1216 * var(--u) + var(--team-track));
+  height: calc(var(--team-h) + var(--team-track));
 }
 /* the 1216u band pins centred in the viewport while the carousel scrubs */
 .team__pin {
   position: sticky;
-  top: calc((100vh - 1216 * var(--u)) / 2);
-  height: calc(1216 * var(--u));
+  top: calc((100vh - var(--team-h)) / 2);
+  height: var(--team-h);
   background: #ebebeb;
   color: var(--c-black);
   overflow: hidden;
@@ -970,7 +973,7 @@ a { color: inherit; text-decoration: none; }
   position: sticky;
   bottom: 0;
   z-index: 0;
-  height: calc(792 * var(--u));
+  height: max(100vh, calc(792 * var(--u)));
   background: var(--c-black);
   overflow: hidden;
 }

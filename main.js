@@ -1820,7 +1820,6 @@
     : [];
   const teamFr = teamSec ? [...teamSec.querySelectorAll('.fr')].map((el, i) => ({ el, rs: 0.48 + i * 0.04 })) : [];
   const teamPhotos = teamSec ? [...teamSec.querySelectorAll('.team__photo')].map((el) => ({ el })) : [];
-  teamPhotos.forEach((p, i) => addReveal(p.el, COVER_EB, 0, i * 140));
 
   // ---------- team member carousel (pinned) ----------
   // T = pinned progress over --team-track; three eased hand-over windows sum
@@ -1976,40 +1975,40 @@
   //   1.90/2.50  link plate draws and grows the same way; links sweep on top
   const fClaimWords = footerEl
     ? [...footerEl.querySelectorAll('.footer__claim .cw')].map((el, i, a) =>
-        ({ el, rs: 1.05 + (i / a.length) * 0.45 + hash01(i + 980) * 0.06 }))
+        ({ el, rs: 0.10 + (i / a.length) * 0.20 + hash01(i + 980) * 0.04 }))
     : [];
   const fBarWords = footerEl
     ? [...footerEl.querySelectorAll('.footer__bar .cw')].map((el, i, a) =>
-        ({ el, rs: 2.55 + (i / a.length) * 0.35 + hash01(i + 1010) * 0.05 }))
+        ({ el, rs: 0.30 + (i / a.length) * 0.18 + hash01(i + 1010) * 0.03 }))
     : [];
-  const fBarFr = footerEl ? [...footerEl.querySelectorAll('.footer__bar .fr')].map((el, i) => ({ el, rs: 2.95 + i * 0.05 })) : [];
+  const fBarFr = footerEl ? [...footerEl.querySelectorAll('.footer__bar .fr')].map((el, i) => ({ el, rs: 0.50 + i * 0.04 })) : [];
   const fCta = $('footerCta');
   const fPlate = $('footerPlate');
   const fBar = footerEl ? footerEl.querySelector('.footer__bar') : null;
   const FT = { t0: 0, done: false };
-  const FT_END = 3.5;
-  const FT_CTA = 1.35, FT_PLATE = 1.90;
+  const FT_END = 1.60;
+  const FT_CTA = 0.06, FT_PLATE = 0.12; // everything lands together (client rev)
 
   function footerFrame(t) {
     const k = u(), travel = 38 * k;
-    renderFooterLogoIn(seg(t, 0, 1.40));
-    for (const m of fClaimWords) sweepWord(m, t, 0.35, 0.12, 0.45, travel);
-    for (const m of fBarWords) sweepWord(m, t, 0.35, 0.12, 0.45, travel);
+    renderFooterLogoIn(seg(t, 0, 0.95));
+    for (const m of fClaimWords) sweepWord(m, t, 0.28, 0.08, 0.30, travel);
+    for (const m of fBarWords) sweepWord(m, t, 0.28, 0.08, 0.30, travel);
     for (const m of fBarFr) fadeRise(m, t, travel);
     if (fCta) { // 2px line draws across, then the block grows up from it
-      const lw = easeOut(seg(t, FT_CTA, FT_CTA + 0.60));
-      const lh = easeOut(seg(t, FT_CTA + 0.60, FT_CTA + 1.30));
+      const lw = easeOut(seg(t, FT_CTA, FT_CTA + 0.40));
+      const lh = easeOut(seg(t, FT_CTA + 0.40, FT_CTA + 0.85));
       const h = Math.max(2, 100 * k * lh);
       fCta.style.width = (339 * k * lw).toFixed(2) + 'px';
       fCta.style.height = h.toFixed(2) + 'px';
       fCta.style.padding = `0 ${(12 * k * lh).toFixed(2)}px ${(8 * k * lh).toFixed(2)}px`;
       fCta.style.opacity = lw > 0 ? '1' : '0';
-      const ct = seg(t, FT_CTA + 1.20, FT_CTA + 1.50);
+      const ct = seg(t, FT_CTA + 0.78, FT_CTA + 1.00);
       for (const sp of fCta.children) sp.style.opacity = ct.toFixed(3);
     }
     if (fPlate && fBar) { // the links' plate arrives the same way as the button
-      const pw = easeOut(seg(t, FT_PLATE, FT_PLATE + 0.60));
-      const ph = easeOut(seg(t, FT_PLATE + 0.60, FT_PLATE + 1.30));
+      const pw = easeOut(seg(t, FT_PLATE, FT_PLATE + 0.40));
+      const ph = easeOut(seg(t, FT_PLATE + 0.40, FT_PLATE + 0.85));
       fPlate.style.width = (pw * 100).toFixed(2) + '%';
       fPlate.style.height = Math.max(2, fBar.offsetHeight * ph).toFixed(2) + 'px';
     }
@@ -2023,9 +2022,23 @@
     if (fPlate) { fPlate.style.width = '100%'; fPlate.style.height = '100%'; }
   }
 
+  const navBars = [...document.querySelectorAll('.nav')];
+  let lastNavHide = -1;
+  function hideNavForFooter(ex) {
+    // past 60% uncovered the footer carries the logo and the CTA itself
+    const h = easeInOut(clamp01((ex - 0.60) / 0.22));
+    if (h === lastNavHide) return;
+    lastNavHide = h;
+    for (const n of navBars) {
+      n.style.opacity = (1 - h).toFixed(3);
+      n.style.visibility = h >= 1 ? 'hidden' : '';
+    }
+  }
+
   function updateFooter(ts) {
     if (!footerEl) return;
     const ex = footerExposure();
+    hideNavForFooter(ex);
     if (ex <= 0.002 && !FT.t0) return;
     if (patReady) { // the hero's pattern, full colour, stir and all
       if (!fpCanvas.width) resizeFooterPattern();
