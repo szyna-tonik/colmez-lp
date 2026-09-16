@@ -1155,9 +1155,10 @@ a.footer__link:hover::after { transform: scaleX(1); }
    arrows are pseudo-elements of a span that never moves — animating the span
    itself dragged the replacement out with it. The span keeps its own glyph
    only for layout, painted transparent. */
-.cta__arrow {
+.cta__arrow { /* the mask: both arrows move inside the glyph's own box */
   position: relative;
   display: inline-block;
+  overflow: hidden;
   color: transparent;
 }
 .cta__arrow::before,
@@ -1169,19 +1170,11 @@ a.footer__link:hover::after { transform: scaleX(1); }
   color: var(--c-white);
   transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1);
 }
-.cta__arrow::after { /* the replacement waits off to the left, invisible */
-  opacity: 0;
-  transform: translateX(-240%);
-  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1), opacity 0s 0.42s;
-}
+.cta__arrow::after { transform: translateX(-120%); } /* the replacement waits just outside the mask */
 .cta:hover .cta__arrow::before,
-.footer__cta:hover .cta__arrow::before { transform: translateX(300%); }
+.footer__cta:hover .cta__arrow::before { transform: translateX(120%); }
 .cta:hover .cta__arrow::after,
-.footer__cta:hover .cta__arrow::after {
-  opacity: 1;
-  transform: translateX(0);
-  transition: transform 0.42s cubic-bezier(0.61, 0, 0.2, 1), opacity 0s;
-}
+.footer__cta:hover .cta__arrow::after { transform: translateX(0); }
 
 @media (prefers-reduced-motion: reduce) {
   .cta::before, .footer__cta::before,
