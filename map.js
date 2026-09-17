@@ -448,7 +448,10 @@
     gl2.uniform1f(bglU.uTime, REDUCED ? 7.3 : now / 1000);
     gl2.uniform2f(bglU.uSeed, (bxE / W) * sa, byE / H);
     gl2.uniform1f(bglU.uRad, blobRadius(block, sa));
-    gl2.uniform1f(bglU.uZoom, PAT_ZOOM);
+    // PAT_ZOOM is calibrated for a ~1000px-wide map; scale it with the CSS
+    // width so the lines keep the same on-screen weight on mobile (a fixed
+    // 0.45 over a 375px canvas thins the strokes to invisible sub-pixels)
+    gl2.uniform1f(bglU.uZoom, PAT_ZOOM * 1000 / Math.max(W, 1));
     gl2.clearColor(0, 0, 0, 0);
     gl2.clear(gl2.COLOR_BUFFER_BIT);
     gl2.drawArrays(gl2.TRIANGLES, 0, 6);
@@ -460,12 +463,12 @@
   // dissolve edge inwards, so the polygon fills right up to its border
   const BLOB_COVER = 1.5;
   // 2.6 (the logo's own zoom) was far too coarse spread over the whole map —
-  // a hovered state showed two or three giant contour rings; 1.0 shows the
-  // full pattern across the band, matching the logo hover's line density
-  // (client rev: as dense as the logo). Mirror-tiled in the shader, so 0.7
-  // packs ~1.4x the full pattern across the band; the doubled raster stroke
-  // width keeps the lines at logo weight at this scale.
-  let PAT_ZOOM = 0.7;
+  // a hovered state showed two or three giant contour rings. Mirror-tiled in
+  // the shader, so values < 1 pack multiple copies of the full pattern across
+  // the band. Client rev 2: zoomed OUT further (0.45) so the strokes thin to
+  // the fine, small lines of the logo hover — the doubled raster stroke keeps
+  // them from vanishing into sub-pixel hairlines at this scale.
+  let PAT_ZOOM = 0.45;
   function blobRadius(block, sa) {
     const qx = (x) => (x / W) * sa, qy = (y) => y / H;
     const sx = qx(bxE), sy = qy(byE);
@@ -762,8 +765,35 @@
   }
   const wake = () => { if (!hoverRaf) hoverRaf = requestAnimationFrame(hoverTick); };
 
+  // mobile: hover makes no sense on touch — a TAP lights the state (and a
+  // second tap on it, or a tap on water, releases it). Desktop untouched.
+  const MTAP = matchMedia('(max-width: 767px)').matches;
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (!MTAP || curP < HOV_P || !blocks.length) return;
+    const r = cv.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    mx = x; my = y;
+    let hb = null;
+    for (const b of BUBBLES) {
+      if (b.sx === undefined || b.sx < -1e5) continue;
+      const dx = x - b.sx, dy = y - b.sy;
+      if (dx * dx + dy * dy <= b.sr * b.sr * 1.21) { hb = b; break; }
+    }
+    hovBub = hb === hovBub ? null : hb;
+    const st = pick(Math.round(x), Math.round(y));
+    if (st && st !== hovState) {
+      if (dim < 0.01) { bxE = x; byE = y; } // fresh tap: blob starts here
+      hovState = st;
+    } else {
+      hovState = null; // tap on the lit state or outside releases it
+      mx = -1; my = -1;
+    }
+    wake();
+  });
+
   cv.addEventListener('pointermove', (e) => {
-    if (curP < HOV_P || !blocks.length) return;
+    if (MTAP || curP < HOV_P || !blocks.length) return;
     const r = cv.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     mx = x; my = y;
@@ -781,7 +811,7 @@
     if (st !== hovState) hovState = st;
     wake();
   });
-  cv.addEventListener('pointerleave', () => { hovState = null; hovBub = null; mx = -1; my = -1; wake(); });
+  cv.addEventListener('pointerleave', () => { if (MTAP) return; hovState = null; hovBub = null; mx = -1; my = -1; wake(); }); // touch fires it right after a tap
 
   let rt = 0;
   window.addEventListener('resize', () => {

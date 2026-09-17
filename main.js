@@ -45,6 +45,19 @@
   const DESIGN_W = 1496, DESIGN_H = 820;
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // ---------- mobile (<= 767px) ----------
+  // Mobile keeps the desktop's flair (word sweeps, goo asset reveals, the
+  // living pattern, the footer pattern) but NONE of its scroll machinery:
+  // no wheel smoothing, no pinned stages, everything time-driven and
+  // viewport-triggered on the native scroll. The layout comes from the
+  // media query in styles.css; bootMobile() at the bottom wires the rest.
+  // Crossing the breakpoint reloads so the right build boots.
+  const MOBILE_MQ = matchMedia('(max-width: 767px)');
+  const MOBILE = MOBILE_MQ.matches;
+  const mqReload = () => location.reload();
+  if (MOBILE_MQ.addEventListener) MOBILE_MQ.addEventListener('change', mqReload);
+  else if (MOBILE_MQ.addListener) MOBILE_MQ.addListener(mqReload);
+
   // ---------- helpers ----------
   const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
   const seg = (p, a, b) => clamp01((p - a) / (b - a));
@@ -868,8 +881,10 @@
   const logoFx = $('logoFx');
   let logoHover = false, lhp = 0, logoFxClear = true;
   let lmxRaw = -1e6, lmyRaw = -1e6, lmx = -1e6, lmy = -1e6;
+  const LOGO_HOVER_DELAY = 180; // ms before the melt starts (client rev)
+  let logoHoverT0 = 0;
 
-  logo.addEventListener('mouseenter', () => { logoHover = true; });
+  logo.addEventListener('mouseenter', () => { logoHover = true; logoHoverT0 = performance.now(); });
   logo.addEventListener('mouseleave', () => { logoHover = false; });
   logo.addEventListener('mousemove', (e) => {
     const r = logoFx.getBoundingClientRect();
@@ -1105,7 +1120,8 @@
 
   function renderLogoFx(now) {
     if (!lgl || !logoTexReady || !logoMaskReady) return;
-    const target = logoHover && lastNavT < 0.05 && !REDUCED && lmxRaw > -1e5 ? 1 : 0;
+    const armed = logoHover && now - logoHoverT0 >= LOGO_HOVER_DELAY;
+    const target = armed && lastNavT < 0.05 && !REDUCED && lmxRaw > -1e5 ? 1 : 0;
     lhp += (target - lhp) * (1 - Math.exp(-0.016 * (target > lhp ? 4 : 2.4)));
     if (lhp < 0.004) {
       lhp = 0;
@@ -2265,7 +2281,7 @@
   let sTarget = 0, sCur = 0, sInit = false;
 
   window.addEventListener('wheel', (e) => {
-    if (REDUCED || e.ctrlKey) return; // pinch-zoom stays native
+    if (MOBILE || REDUCED || e.ctrlKey) return; // mobile scroll stays native; pinch-zoom stays native
     e.preventDefault();
     if (PRE.active) return; // scroll held during the preloader
     if (!sInit) { sTarget = sCur = window.scrollY; sInit = true; }
@@ -2323,12 +2339,323 @@
     requestAnimationFrame(loop);
   }
 
+  // ---------- mobile build ----------
+  // Keeps the desktop flair without its scroll machinery: word sweeps, block
+  // and fade-rise reveals and the CTA line-draw are TIME-driven, fired by an
+  // IntersectionObserver on the native scroll; the goo asset reveals reuse
+  // addReveal/updateReveals verbatim; the vector pattern lives behind the
+  // waste list (moved there at boot) and the footer paints it full colour —
+  // both with the morph, the stir and the bake, exactly the desktop field.
+
+  const MDUR = { w: 700, fr: 620, blk: 900, cta: 1100 };
+  const mGroups = [];
+
+  function mFinish(it) {
+    const st = it.el.style;
+    if (it.type === 'cta') {
+      st.clipPath = '';
+      [...it.el.children].forEach((c) => { c.style.opacity = ''; });
+    } else {
+      st.opacity = '1';
+      st.transform = '';
+      if (it.type === 'w') st.setProperty('--fill', '124%');
+      if (it.sup) it.sup.textContent = String(it.tgt).padStart(3, '0');
+    }
+    it.done = true;
+  }
+
+  function mInit(it) {
+    const st = it.el.style;
+    if (REDUCED) { mFinish(it); return; }
+    if (it.type === 'cta') {
+      st.clipPath = 'inset(calc(100% - 2px) 100% 0 0)';
+      [...it.el.children].forEach((c) => { c.style.opacity = '0'; });
+    } else {
+      st.opacity = '0';
+      if (it.type === 'w') st.setProperty('--fill', it.fillFrom + '%');
+    }
+  }
+
+  // defs: [{ els, type, delay, stag, dur }] — one group fires as a unit
+  function mGroup(container, defs) {
+    const items = [];
+    defs.forEach((d) => {
+      [...d.els].forEach((el, i) => {
+        const it = {
+          el,
+          type: d.type,
+          delay: (d.delay || 0) + i * (d.stag === undefined ? 60 : d.stag),
+          dur: d.dur || MDUR[d.type],
+          fillFrom: el.classList.contains('hw') ? -40 : -24,
+          sup: null, tgt: 0,
+          done: false,
+        };
+        const sup = d.type === 'w' ? el.querySelector('sup[data-n]') : null;
+        if (sup) { it.sup = sup; it.tgt = parseInt(sup.dataset.n, 10) || 0; }
+        mInit(it);
+        items.push(it);
+      });
+    });
+    const g = { container, items, t0: -1 };
+    mGroups.push(g);
+    return g;
+  }
+
+  const mObs = ('IntersectionObserver' in window) ? new IntersectionObserver((ents) => {
+    for (const e of ents) {
+      if (!e.isIntersecting) continue;
+      mObs.unobserve(e.target);
+      for (const g of mGroups) if (g.container === e.target && g.t0 < 0) g.t0 = performance.now();
+    }
+  }, { rootMargin: '0px 0px -10% 0px', threshold: 0.01 }) : null;
+
+  function runWordAnims(ts) {
+    for (const g of mGroups) {
+      if (g.t0 < 0) continue;
+      for (const it of g.items) {
+        if (it.done) continue;
+        const p = clamp01((ts - g.t0 - it.delay) / it.dur);
+        if (p <= 0) continue;
+        if (p >= 1) { mFinish(it); continue; }
+        const st = it.el.style;
+        if (it.type === 'cta') {
+          const lw = seg(p, 0, 0.5), lh = easeOut(seg(p, 0.4, 1));
+          st.clipPath = `inset(calc(${((1 - lh) * 100).toFixed(2)}% - 2px) ${((1 - lw) * 100).toFixed(2)}% 0 0)`;
+          const lo = seg(p, 0.72, 1);
+          [...it.el.children].forEach((c) => { c.style.opacity = lo.toFixed(3); });
+        } else {
+          const e = easeOut(p);
+          st.opacity = e.toFixed(3);
+          st.transform = `translate3d(0, ${((1 - e) * (it.type === 'blk' ? 20 : 14)).toFixed(1)}px, 0)`;
+          if (it.type === 'w') st.setProperty('--fill', lerp(it.fillFrom, 124, easeInOut(p)).toFixed(1) + '%');
+          if (it.sup) it.sup.textContent = String(Math.round(it.tgt * easeOut(p))).padStart(3, '0');
+        }
+      }
+    }
+  }
+
+  let mFooterT0 = -1;
+
+  // hero photo -> pattern hand-over, scroll-driven and reversible (native
+  // scroll, the photo box is a sticky background): p rides the waste LIST
+  // scrolling in over the box — photo dissolves and the pattern draws in
+  // before the words arrive, then the pattern dims under them, desktop-style.
+  function heroDissolveP() {
+    const r = list.getBoundingClientRect();
+    if (!r.height) return 0;
+    const vh = window.innerHeight;
+    return clamp01((vh - r.top) / (vh * 0.85));
+  }
+
+  function bootMobile() {
+    // the desktop groups its crisis photos to form as ONE image (they sit
+    // side by side there) — stacked vertically on mobile, each should form
+    // when IT shows, so the module-level registrations lose their group
+    for (const r of RVL) r.group = '';
+
+    // the desktop's forced line breaks are meaningless on the narrow column
+    // and there is no whitespace around them in the markup — swap each for a
+    // real space so the words don't fuse (the breakpoint change reloads, so
+    // the desktop never sees this DOM)
+    document.querySelectorAll(
+      '.mhero__headline br, .waste br, .crisis__head br, .map__lead br, ' +
+      '.screens__head br, .screen-item__title br, .team__head br, .footer__claim br'
+    ).forEach((br) => br.replaceWith(' '));
+
+    // hero photo -> pattern: the desktop's own dissolve. The photo layer
+    // stays in flow (mobile CSS) with the pattern canvas underneath and the
+    // WebGL goo on top; mobileLoop drives both from the box's scroll position.
+    if (!initGL()) photoLayer.classList.remove('has-gl');
+
+    // compact nav slides in once the photo box reaches the viewport top —
+    // i.e. the sticky hero (and its big wordmark) is fully covered; a plain
+    // 0.5vh threshold overlapped the blend-difference mini onto the big logo
+    const onScr = () => document.body.classList.toggle('mnav', window.scrollY >= photoLayer.offsetTop - 1);
+    window.addEventListener('scroll', onScr, { passive: true });
+    onScr();
+
+    // team: horizontal swipe carousel built from the desktop pieces
+    const teamPinEl = document.querySelector('.team__pin');
+    const mcardPhotos = [];
+    if (teamPinEl) {
+      const lis = [...document.querySelectorAll('.team__list li')];
+      const bios = [...document.querySelectorAll('.team__bio .team__bio-item')];
+      const photos = [...document.querySelectorAll('.team__photo img')];
+      const car = document.createElement('div');
+      car.className = 'team__mcar';
+      lis.forEach((li, i) => {
+        const card = document.createElement('article');
+        card.className = 'team__mcard';
+        const ph = document.createElement('div');
+        ph.className = 'team__mcard-photo';
+        if (photos[i]) ph.appendChild(photos[i].cloneNode(true));
+        const name = document.createElement('h3');
+        name.className = 'team__name';
+        const nameEl = li.querySelector('.team__name');
+        name.textContent = (nameEl ? nameEl.textContent : '').trim();
+        const chip = document.createElement('span');
+        chip.className = 'team__chip';
+        const chipEl = li.querySelector('.team__chip');
+        chip.textContent = (chipEl ? chipEl.textContent : '').trim();
+        card.appendChild(ph);
+        card.appendChild(name);
+        card.appendChild(chip);
+        if (bios[i]) {
+          const bio = bios[i].cloneNode(true);
+          bio.classList.remove('fr');
+          // client rev: Numair's desktop-merged logo row is too much for the
+          // narrow card — nomura + ares break onto their own line (mobile only)
+          const nom = bio.querySelector('.team__logos-row img[src*="nomura"]');
+          if (nom && nom.parentElement.children.length > 2) {
+            const row = nom.parentElement;
+            const r2 = document.createElement('div');
+            r2.className = 'team__logos-row';
+            r2.appendChild(nom);
+            const ares = row.querySelector('img[src*="ares"]');
+            if (ares) r2.appendChild(ares);
+            row.after(r2);
+          }
+          card.appendChild(bio);
+        }
+        car.appendChild(card);
+        mcardPhotos.push(ph);
+      });
+      teamPinEl.appendChild(car);
+    }
+
+    // static flat map (map.js loads after main.js — one set(1) is stashed
+    // and applied when the topology lands)
+    const mapWait = setInterval(() => {
+      if (window.colmezMap) { window.colmezMap.set(1); clearInterval(mapWait); }
+    }, 80);
+
+    // ---- goo asset reveals (the crisis/quote/screens ones are already
+    // registered at module level; add the mobile-only medias) ----
+    mcardPhotos.forEach((ph, i) => addReveal(ph, COVER_EB, 0, i * 140, 'mteam'));
+
+    // ---- word / block / fade-rise choreography ----
+    const q = (sel, root) => [...(root || document).querySelectorAll(sel)];
+
+    const heroG = mGroup(document.querySelector('.mhero'), [
+      { els: q('.mhero__logo'), type: 'fr', delay: 0, dur: 800 },
+      { els: q('.mhero .hw'), type: 'w', delay: 250, stag: 90 },
+      { els: q('.mhero__cta'), type: 'cta', delay: 650 },
+    ]);
+    heroG.t0 = performance.now() + 200; // fires at load, not on scroll
+
+    mGroup(document.querySelector('.waste__list'), [
+      { els: q('.waste__list .w'), type: 'w', delay: 100, stag: 45 },
+    ]);
+    mGroup(document.querySelector('.waste__lead'), [
+      { els: q('.waste__lead .w'), type: 'w', delay: 100, stag: 55 },
+    ]);
+
+    mGroup(document.querySelector('.crisis__head'), [
+      { els: q('.crisis__head .cw'), type: 'w', stag: 70 },
+    ]);
+    q('.crisis-item').forEach((it) => mGroup(it, [
+      { els: q('.crisis-item__chip .cw', it), type: 'w' },
+      { els: q('.crisis-item__title .cw', it), type: 'w', delay: 90, stag: 70 },
+      { els: q('.crisis-item__desc', it), type: 'blk', delay: 300 },
+    ]));
+
+    mGroup(document.querySelector('.map__lead'), [
+      { els: q('.map__lead .cw'), type: 'w', stag: 40 },
+    ]);
+
+    mGroup(document.querySelector('.quote__body'), [
+      { els: q('.quote__text'), type: 'blk' },
+      { els: q('.quote__name .cw'), type: 'w', delay: 350, stag: 80 },
+      { els: q('.quote__role'), type: 'fr', delay: 500, stag: 110 },
+    ]);
+
+    mGroup(document.querySelector('.screens__head'), [
+      { els: q('.screens__head .cw'), type: 'w', stag: 60 },
+    ]);
+    q('.screen-item').forEach((it) => mGroup(it, [
+      { els: q('.screen-item__chip .cw', it), type: 'w' },
+      { els: q('.screen-item__title .cw', it), type: 'w', delay: 90, stag: 60 },
+      { els: q('.screen-item__sub', it), type: 'fr', delay: 350 },
+      { els: q('.screen-item__rows li', it), type: 'fr', delay: 450, stag: 110 },
+    ]));
+
+    mGroup(document.querySelector('.security'), [
+      { els: q('.security .screen-item__chip .cw'), type: 'w' },
+      { els: q('.security__head .cw'), type: 'w', delay: 90, stag: 45 },
+      { els: q('.security__badge'), type: 'fr', delay: 600 },
+    ]);
+
+    mGroup(document.querySelector('.team__head'), [
+      { els: q('.team__head .cw'), type: 'w', stag: 70 },
+    ]);
+    q('.team__mcard').forEach((card, ci) => mGroup(card, [
+      { els: q('.team__name, .team__chip', card), type: 'fr', delay: 150 + ci * 120, stag: 90 },
+      { els: q('.team__desc, .team__logos', card), type: 'fr', delay: 380 + ci * 120, stag: 120 },
+    ]));
+
+    // footer group fires on exposure (the sticky underfooter always
+    // intersects the viewport, an observer would fire it at load)
+    mGroups.footer = mGroup(document.querySelector('.footer__content'), [
+      { els: q('.footer__logo img'), type: 'fr', dur: 800 },
+      { els: q('.footer__claim .cw'), type: 'w', delay: 150, stag: 60 },
+      { els: q('.footer__cta'), type: 'cta', delay: 450 },
+      { els: q('.footer__bar .cw'), type: 'w', delay: 650, stag: 45 },
+      { els: q('.footer__bar .fr'), type: 'fr', delay: 900 },
+    ]);
+
+    if (mObs) {
+      for (const g of mGroups) {
+        if (g === heroG || g === mGroups.footer || !g.container) continue;
+        mObs.observe(g.container);
+      }
+    } else {
+      for (const g of mGroups) g.items.forEach(mFinish);
+    }
+
+    // waste sups start at 000
+    q('.waste__list sup[data-n]').forEach((sup) => { sup.textContent = '000'; });
+  }
+
+  let mLastTs = 0;
+  function mobileLoop(ts) {
+    const dt = Math.min(0.05, (ts - mLastTs) / 1000 || 0.016);
+    mLastTs = ts;
+    updateStir(ts, dt);
+
+    // hero: pattern draws in under the photo while the photo dissolves into
+    // it (goo); as the words ride onto the pattern it dims under them
+    const hp = heroDissolveP();
+    const dis = REDUCED ? (hp > 0.4 ? 1 : 0) : easeInOut(seg(hp, 0.04, 0.72));
+    renderPattern(easeInOut(seg(hp, 0, 0.6)), ts, 1 - 0.42 * seg(hp, 0.55, 0.95));
+    renderGoo(dis);
+    photoLayer.style.setProperty('--dissolve', dis.toFixed(3)); // no-WebGL fallback fade
+
+    runWordAnims(ts);
+    updateReveals(ts);
+
+    // footer: pattern at full colour + entrance once it is exposed
+    const ex = footerExposure();
+    if (patReady && ex > 0.002) {
+      if (!fpCanvas.width) resizeFooterPattern();
+      paintPattern(fpctx, fpCanvas.width, fpCanvas.height, fpScale, fpOx, fpOy, 1, ts, 1, !REDUCED);
+    }
+    if (mFooterT0 < 0 && ex > 0.3) { mFooterT0 = ts; mGroups.footer.t0 = ts; }
+
+    requestAnimationFrame(mobileLoop);
+  }
+
+  let mResizeRaf = 0;
+  function onResizeMobile() {
+    cancelAnimationFrame(mResizeRaf);
+    mResizeRaf = requestAnimationFrame(() => {
+      resizeGL();
+      resizePattern();
+      resizeFooterPattern();
+      lastPatKey = '';
+    });
+  }
+
   // ---------- boot ----------
-  hint.addEventListener('click', (e) => {
-    e.preventDefault();
-    // jump to the stage end: list and lead fully filled, crisis at the doorstep
-    window.scrollTo({ top: stage.offsetTop + (stage.offsetHeight - window.innerHeight), behavior: 'smooth' });
-  });
   window.addEventListener('pointermove', onPointerMove, { passive: true });
 
   let resizeRaf = 0;
@@ -2348,16 +2675,30 @@
     });
   }
 
-  if (!initGL()) photoLayer.classList.remove('has-gl');
-  initLogoGL();
-  initCtaGL();
-  initMiniLogoGL();
-  initFooterLogoGL();
-  initPreloader();
-  loadPattern();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutWords(); dirty = true; });
-  window.addEventListener('resize', onResize);
-  window.addEventListener('load', onResize);
-  onResize();
-  requestAnimationFrame(loop);
+  if (MOBILE) {
+    bootMobile();
+    loadPattern();
+    window.addEventListener('resize', onResizeMobile);
+    window.addEventListener('load', onResizeMobile);
+    onResizeMobile();
+    requestAnimationFrame(mobileLoop);
+  } else {
+    hint.addEventListener('click', (e) => {
+      e.preventDefault();
+      // jump to the stage end: list and lead fully filled, crisis at the doorstep
+      window.scrollTo({ top: stage.offsetTop + (stage.offsetHeight - window.innerHeight), behavior: 'smooth' });
+    });
+    if (!initGL()) photoLayer.classList.remove('has-gl');
+    initLogoGL();
+    initCtaGL();
+    initMiniLogoGL();
+    initFooterLogoGL();
+    initPreloader();
+    loadPattern();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutWords(); dirty = true; });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('load', onResize);
+    onResize();
+    requestAnimationFrame(loop);
+  }
 })();

@@ -69,6 +69,9 @@ a { color: inherit; text-decoration: none; }
   .lp { --u: calc(100cqw / 1496); }
 }
 
+/* mobile-only hero block (see the media query at the end of the file) */
+.mhero { display: none; }
+
 /* ---------- STAGE ---------- */
 
 .stage {
@@ -492,6 +495,12 @@ a { color: inherit; text-decoration: none; }
      from just under the nav to ~24px above the viewport bottom (client rev) */
   height: min(calc(759 * var(--u)), calc(100vh - 88px));
   overflow: hidden;
+}
+/* pan wrapper fills the stage on desktop (map.js reads its size); on mobile
+   it is wider than the viewport and the stage scrolls it */
+.map__pan {
+  position: absolute;
+  inset: 0;
 }
 .map__stage canvas {
   position: absolute;
@@ -1180,4 +1189,425 @@ a.footer__link:hover::after { transform: scaleX(1); }
   .cta::before, .footer__cta::before,
   .cta__arrow::before, .cta__arrow::after { transition: none; }
   .cta:hover .cta__label, .footer__cta:hover .cta__label { animation: none; }
+}
+
+/* ==================================================================
+   MOBILE (<= 767px) — a static, single-column translation of the page.
+   No smooth scroll, no pinning, no scroll hijacking: main.js exits
+   early on this breakpoint, so every JS-driven state below is undone
+   in CSS (words visible, images uncovered, sections unstuck).
+   Scale: --u = 1px of a 390-wide design frame, capped so type stops
+   growing past ~430px-wide viewports.
+================================================================== */
+@media (max-width: 767px) {
+
+  :root { --u: min(calc(100vw / 390), 1.1px); }
+  @supports (width: 1cqw) {
+    .lp { --u: min(calc(100cqw / 390), 1.1px); }
+  }
+
+  /* forced desktop line breaks make words hang on the narrow column —
+     let the headings wrap naturally, balanced */
+  .mhero__headline br, .waste__list br, .waste__lead br, .crisis__head br,
+  .map__lead br, .screens__head br, .screen-item__title br, .team__head br,
+  .footer__claim br { display: none; }
+  .mhero__headline, .crisis__head, .map__lead, .screens__head,
+  .screen-item__title, .security__head, .team__head, .quote__text,
+  .footer__claim { text-wrap: balance; }
+
+  /* the team head words have no desktop gradient (they only fade-rise);
+     hide them at rest so the mobile animator can bring them in */
+  .team .cw { display: inline-block; opacity: 0; will-change: transform, opacity; }
+
+  /* ---------- stage -> static hero + waste list ---------- */
+  .stage { height: auto; }
+  .stage__pin { position: static; height: auto; overflow: visible; }
+  .hero-copy, .scroll-hint { display: none; }
+  .layer { position: static; }
+  /* the desktop photo box as a sticky, viewport-filling background: the
+     photo goo-dissolves into the pattern while the waste list (pulled up
+     over it) scrolls in and sweeps ON the pattern — the desktop sequence
+     on the native scroll, no pinning of the scroll itself */
+  .layer--photo {
+    position: sticky;
+    /* the desktop .layer's inset:0 leaves bottom:0 behind — as a sticky
+       constraint it pins the box to the viewport BOTTOM at rest, riding it
+       up over the hero copy. Reset every side, keep only the top stick. */
+    inset: auto;
+    top: 0;
+    z-index: auto;
+    width: 100%;
+    height: 100vh;
+    height: 100svh;
+    margin-top: calc(48 * var(--u));
+    transform: none;
+    will-change: auto;
+    overflow: hidden;
+    background: var(--c-black);
+  }
+  .layer--text {
+    position: relative;
+    pointer-events: auto;
+    margin-top: -100vh;
+    margin-top: -100svh;
+  }
+
+  .mhero {
+    display: flex;
+    flex-direction: column;
+    padding: calc(16 * var(--u)) calc(16 * var(--u)) 0;
+    /* desktop grammar: the hero holds still while the photo (later in the
+       DOM, so it paints on top) scrolls up OVER it — sticky, not a pin */
+    position: sticky;
+    top: 0;
+  }
+  .mhero__logo { width: 100%; height: auto; }
+  .mhero__headline {
+    margin: calc(56 * var(--u)) 0 0;
+    font-size: calc(48 * var(--u));
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  /* hero words: the preloader's entry sweep — gold edge wipes in, white stays */
+  .mhero .hw {
+    display: inline-block;
+    padding: 0.14em 0 0.24em;
+    margin: -0.14em 0 -0.24em;
+    opacity: 0;
+    will-change: transform, opacity;
+    --fill: -40%;
+    --edge-w: 14%;
+    --tail-w: 34%;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(90deg,
+      var(--c-white) 0%,
+      var(--c-white) var(--fill),
+      var(--c-gold-500) calc(var(--fill) + var(--edge-w)),
+      var(--c-grey-800) calc(var(--fill) + var(--tail-w)),
+      var(--c-grey-800) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    background-repeat: no-repeat;
+  }
+  .mhero__cta {
+    margin-top: calc(32 * var(--u));
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    height: calc(88 * var(--u));
+    padding: 0 calc(12 * var(--u)) calc(8 * var(--u));
+    background: var(--c-gold-500);
+    font-size: calc(14 * var(--u));
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .waste {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    /* one viewport of run-up: the photo dissolves into the pattern before
+       the first words ride onto it; the tail keeps the last words on the
+       pattern before it scrolls off */
+    padding: 88vh calc(16 * var(--u)) 22vh;
+    padding: 88svh calc(16 * var(--u)) 22svh;
+    gap: calc(48 * var(--u));
+    font-size: calc(30 * var(--u));
+  }
+  .waste__list, .waste__lead { width: auto; }
+
+  /* ---------- nav: compact fixed pair, slides in after the hero ---------- */
+  #navLogo, #navCta { display: none; }
+  .nav__logo--mini, .cta--mini {
+    visibility: visible;
+    transform: translateY(-160%);
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(0.61, 0, 0.2, 1), opacity 0.3s ease;
+  }
+  .nav__logo--mini {
+    left: calc(16 * var(--u));
+    top: calc(18 * var(--u));
+    width: calc(110 * var(--u));
+    height: auto;
+  }
+  .nav__logo--mini img { width: 100%; height: auto; }
+  .nav__logo--mini .nav__logo-fx { display: none; }
+  .cta--mini {
+    left: auto;
+    right: calc(12 * var(--u));
+    top: calc(12 * var(--u));
+    width: auto;
+    height: calc(40 * var(--u));
+    padding: 0 calc(12 * var(--u)) calc(8 * var(--u));
+    gap: calc(12 * var(--u));
+    font-size: calc(11 * var(--u));
+  }
+  body.mnav .nav__logo--mini, body.mnav .cta--mini { transform: none; opacity: 1; }
+
+  /* ---------- crisis: static stack — chip, image, text under it ---------- */
+  .crisis::after { display: none; }
+  .crisis__pin {
+    position: static;
+    padding: calc(96 * var(--u)) 0;
+  }
+  .crisis__head {
+    margin: 0 calc(16 * var(--u)) calc(56 * var(--u));
+    width: auto;
+    font-size: calc(32 * var(--u));
+  }
+  .crisis__list {
+    width: auto;
+    margin: 0 calc(16 * var(--u));
+    gap: calc(40 * var(--u));
+  }
+  .crisis-item, .crisis-item.is-open {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: calc(20 * var(--u));
+  }
+  .crisis-item__left { display: contents; }
+  .crisis-item__num { order: 1; flex: none; padding: 0; }
+  .crisis-item__chip, .crisis-item.is-open .crisis-item__chip {
+    display: inline-flex;
+    width: auto;
+    min-width: calc(44 * var(--u));
+    padding: calc(4 * var(--u)) calc(6 * var(--u));
+  }
+  .crisis-item__media {
+    order: 2;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 358 / 220;
+  }
+  .crisis-item__text {
+    order: 3;
+    width: auto;
+    justify-content: flex-start;
+    gap: calc(16 * var(--u));
+  }
+  .crisis-item__title { font-size: calc(28 * var(--u)); }
+  .crisis-item__desc { padding-top: 0; font-size: calc(16 * var(--u)); line-height: 1.3; }
+
+  /* ---------- map: big, with its own horizontal pan ---------- */
+  .map { padding: calc(80 * var(--u)) 0 calc(96 * var(--u)); }
+  .map__lead {
+    margin: 0 calc(16 * var(--u));
+    width: auto;
+    font-size: calc(26 * var(--u));
+  }
+  /* the stage scrolls a 2-viewport-wide pan: roughly the map's left half is
+     on screen, the rest has room to breathe instead of being squeezed in */
+  .map__stage {
+    margin-top: calc(40 * var(--u));
+    height: min(120vw, 500px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .map__stage::-webkit-scrollbar { display: none; }
+  .map__pan {
+    position: relative;
+    inset: auto;
+    width: 200vw;
+    height: 100%;
+  }
+
+  /* ---------- quote (mobile Figma 9319:6819): centred portrait on the
+     grey band, quote / name / roles under it ---------- */
+  .quote { height: auto; padding: calc(28 * var(--u)) 0 calc(48 * var(--u)); }
+  .quote__media {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: calc(187 * var(--u));
+    height: auto;
+    aspect-ratio: 354 / 500; /* the source photo's own aspect — no crop */
+    margin: 0 auto;
+  }
+  .quote__body {
+    position: static;
+    transform: none;
+    width: auto;
+    padding: calc(32 * var(--u)) calc(24 * var(--u)) 0;
+    gap: calc(28 * var(--u));
+  }
+  .quote__text { font-size: calc(26 * var(--u)); line-height: 1.05; }
+  .quote__name { font-size: calc(16 * var(--u)); }
+  .quote__role { font-size: calc(12 * var(--u)); }
+
+  /* ---------- screens: chip, title, image, rows — one column ---------- */
+  .screens { padding: calc(96 * var(--u)) 0 0; }
+  .screens__head {
+    margin: 0 calc(16 * var(--u)) calc(64 * var(--u));
+    width: auto;
+    font-size: calc(32 * var(--u));
+  }
+  .screens__list { gap: calc(64 * var(--u)); }
+  .screen-item {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 calc(16 * var(--u));
+    gap: calc(24 * var(--u));
+  }
+  .screen-item__left, .screen-item__text { display: contents; }
+  .screen-item__num { order: 1; width: auto; padding: 0; }
+  .screen-item__chip { width: calc(88 * var(--u)); }
+  .screen-item__top { order: 2; gap: calc(20 * var(--u)); }
+  .screen-item__title { font-size: calc(28 * var(--u)); }
+  .screen-item__sub { font-size: calc(16 * var(--u)); line-height: 1.3; }
+  .screen-item__media {
+    order: 3;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 696 / 441;
+  }
+  .screen-item__rows { order: 4; gap: calc(16 * var(--u)); font-size: calc(15 * var(--u)); line-height: 1.3; }
+  .screen-item__rows li + li { padding-top: calc(16 * var(--u)); }
+
+  /* ---------- security ---------- */
+  .security {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: calc(48 * var(--u));
+    padding: calc(96 * var(--u)) calc(16 * var(--u));
+  }
+  .security__left { flex-direction: column; gap: calc(24 * var(--u)); }
+  .security__left .screen-item__num { order: 0; width: auto; padding: 0; }
+  .security__left .screen-item__chip { width: calc(88 * var(--u)); }
+  .security__head { width: auto; font-size: calc(28 * var(--u)); }
+  .security__badge { width: calc(140 * var(--u)); height: calc(140 * var(--u)); margin: 0; }
+
+  /* ---------- team: horizontal swipe carousel (built by main.js) ---------- */
+  .team { height: auto; }
+  .team__pin {
+    position: static;
+    height: auto;
+    padding: calc(80 * var(--u)) 0 calc(96 * var(--u));
+    overflow: visible;
+  }
+  .team__head {
+    position: static;
+    margin: 0 calc(16 * var(--u)) calc(48 * var(--u));
+    width: auto;
+    font-size: calc(36 * var(--u));
+  }
+  .team__list, .team__bio, .team__strip { display: none; }
+  .team__mcar {
+    display: flex;
+    gap: calc(16 * var(--u));
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: calc(16 * var(--u));
+    padding: 0 calc(16 * var(--u));
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .team__mcar::-webkit-scrollbar { display: none; }
+  .team__mcard {
+    flex: 0 0 calc(300 * var(--u));
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: calc(16 * var(--u));
+  }
+  .team__mcard-photo {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 285 / 343.5;
+    background: var(--c-black);
+    overflow: hidden;
+  }
+  .team__mcard-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+  .team__mcard .team__name { font-size: calc(24 * var(--u)); }
+  .team__mcard .team__chip { height: calc(24 * var(--u)); }
+  /* the cloned bio is not the first child of its card — undo the desktop
+     stacked-crossfade hiding (and the absolute positioning); the mobile
+     animator drives the .fr opacities inline */
+  .team__mcard .team__bio-item {
+    position: static;
+    opacity: 1 !important;
+    visibility: visible !important;
+    gap: calc(20 * var(--u));
+    margin-top: calc(8 * var(--u));
+  }
+  .team__mcard .team__desc { font-size: calc(15 * var(--u)); line-height: 1.3; }
+  .team__mcard .team__logos { gap: calc(14 * var(--u)); }
+  .team__mcard .team__logos-row { flex-wrap: wrap; gap: calc(16 * var(--u)); row-gap: calc(10 * var(--u)); }
+  /* desktop logo sizes ride inline --u styles — flatten to one height,
+     then optical per-logo corrections (client rev): wordmark-style logos
+     (susquehanna) run huge at a shared height, emblem-style ones (bair,
+     nomura, jeff's set) vanish — sized so each member's set reads level
+     and every row fits the card in the intended line count */
+  .team__mcard .team__logos img { height: calc(18 * var(--u)) !important; width: auto !important; }
+  .team__mcard .team__logos img[src*="susquehanna"] { height: calc(14 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="stanford-med"] { height: calc(24 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="boeing"] { height: calc(24 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="bair"] { height: calc(26 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="antin"] { height: calc(26 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="nomura"] { height: calc(30 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="us-ecology"] { height: calc(28 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="tetra-tech"] { height: calc(26 * var(--u)) !important; }
+  .team__mcard .team__logos img[src*="milestone"] { height: calc(28 * var(--u)) !important; }
+
+  /* ---------- footer: desktop grammar, one column ----------
+     The underfooter reveal stays (sticky bottom, sections slide off it),
+     the hero pattern paints the full band (bootMobile drives it) and the
+     content sits on a black plate like the desktop's. */
+  .footer {
+    height: auto;
+    min-height: 100svh;
+    display: flex;
+  }
+  .footer__logofx { display: none; }
+  .footer__content {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: calc(100% - 16 * var(--u));
+    height: auto;
+    margin: auto calc(8 * var(--u)) calc(8 * var(--u));
+    padding: calc(20 * var(--u)) calc(16 * var(--u)) 0;
+    background: var(--c-black);
+    display: flex;
+    flex-direction: column;
+    gap: calc(32 * var(--u));
+    overflow: visible;
+  }
+  .footer__logo { position: static; width: 100%; }
+  .footer__row {
+    position: static;
+    width: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(28 * var(--u));
+  }
+  .footer__claim { position: static; width: auto; font-size: calc(34 * var(--u)); }
+  .footer__cta {
+    position: static;
+    width: 100%;
+    height: calc(72 * var(--u));
+    font-size: calc(14 * var(--u));
+  }
+  .footer__bar {
+    position: static;
+    width: calc(100% + 32 * var(--u));
+    margin: calc(8 * var(--u)) calc(-16 * var(--u)) 0;
+    padding: calc(20 * var(--u)) calc(16 * var(--u));
+    background: var(--c-gold-700);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: calc(14 * var(--u));
+  }
+  .footer__plate { display: none; }
+  .footer__link, .footer__backed { font-size: calc(13 * var(--u)); }
+
 }

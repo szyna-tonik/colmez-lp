@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Colmez — Powering next-generation hazardous waste teams</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
 
@@ -13,6 +13,17 @@
   <!-- STAGE: hero -> photo rises -> dissolves into pattern -> waste list -->
   <section class="stage" id="stage">
     <div class="stage__pin">
+
+      <!-- mobile hero (display:none on desktop): the static, single-column
+           take on the hero — wordmark, headline, CTA, photo. The desktop
+           choreography (preloader, pinned stage, goo) never runs on mobile. -->
+      <div class="mhero">
+        <img class="mhero__logo mfr" src="assets/img/logo.svg" alt="Colmez" width="1416" height="191">
+        <p class="mhero__headline"><span class="hw">Powering</span> <span class="hw">next-generation</span> <span class="hw">hazardous</span> <span class="hw">waste</span> <span class="hw">teams.</span></p>
+        <a class="mhero__cta" href="#contact"><span>Book a meeting</span><span aria-hidden="true">&rarr;</span></a>
+        <!-- the photo itself is the desktop's #photoLayer box (photo goo-dissolves
+             into the vector pattern as it scrolls up), shown in flow on mobile -->
+      </div>
 
       <!-- hero copy (gets covered by the rising photo) -->
       <div class="hero-copy" id="heroCopy">
@@ -141,13 +152,18 @@
   <section class="map" id="map">
     <p class="map__lead" id="mapLead"><span class="cw">Colmez</span> <span class="cw">is</span> <span class="cw">the</span> <span class="cw">revenue</span> <span class="cw">platform</span> <span class="cw">for</span><br><span class="cw">hazardous</span> <span class="cw">waste</span> <span class="cw">disposal</span> <span class="cw">companies.</span><br><span class="cw">It</span> <span class="cw">finds</span> <span class="cw">the</span> <span class="cw">opportunities,</span> <span class="cw">manages</span> <span class="cw">the</span><br><span class="cw">pipeline,</span> <span class="cw">and</span> <span class="cw">shortens</span> <span class="cw">every</span> <span class="cw">sales</span> <span class="cw">cycle.</span></p>
     <div class="map__stage">
-      <canvas id="mapCv" aria-label="Map of permitted hazardous waste disposal capacity across the United States" role="img"></canvas>
+      <!-- pan wrapper: same box as the stage on desktop; on mobile it is
+           wider than the viewport and the stage scrolls it horizontally
+           (map.js sizes the canvas from cv.parentElement) -->
+      <div class="map__pan">
+        <canvas id="mapCv" aria-label="Map of permitted hazardous waste disposal capacity across the United States" role="img"></canvas>
+      </div>
     </div>
   </section>
 
   <!-- QUOTE (Figma 9264:273): grey-800 band, advisor photo left, pull quote right -->
   <section class="quote" id="quote">
-    <div class="quote__media"><img src="assets/img/quote-jeff.png" alt="Jeff Feeler"></div>
+    <div class="quote__media"><img src="assets/img/team-jeff.png" alt="Jeff Feeler"></div>
     <div class="quote__body">
       <blockquote class="quote__text blk">“The teams that win in this industry are the ones that turn information into action first. Colmez keeps every sales cycle moving and puts more revenue on the board.”</blockquote>
       <div class="quote__attr">
@@ -349,7 +365,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson@3/dist/topojson.min.js"></script>
-<script src="main.js"></script>
-<script src="map.js"></script>
+<script src="main.js?v=12"></script>
+<script src="map.js?v=12"></script>
 </body>
 </html>
